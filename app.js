@@ -273,6 +273,7 @@ function appendMessage(role, content, animate = true) {
         <span class="message-author">${escHtml(author)}</span>
         <span class="message-time">${time}</span>
       </div>
+      <div class="message-status" style="display:none;"></div>
       <div class="message-body">${role === 'assistant' ? renderMarkdown(content) : `<span>${escHtml(content)}</span>`}</div>
       <div class="message-actions">
         <button class="msg-action-btn" data-action="copy">Copy</button>
@@ -357,6 +358,7 @@ async function sendMessage() {
     removeTypingIndicator();
     const assistantMsg = appendMessage('assistant', '', true);
     const bodyEl = assistantMsg.querySelector('.message-body');
+    const statusEl = assistantMsg.querySelector('.message-status');
     let fullContent = '';
 
     const reader = res.body.getReader();
@@ -377,6 +379,12 @@ async function sendMessage() {
           if (dataStr === '[DONE]') break;
           try {
             const json = JSON.parse(dataStr);
+            if (json.status !== undefined) {
+              if (json.status) { statusEl.textContent = json.status; statusEl.style.display = 'inline-block'; }
+              else { statusEl.style.display = 'none'; }
+              scrollBottom();
+              continue;
+            }
             const delta = json.choices[0]?.delta?.content || '';
             fullContent += delta;
             bodyEl.innerHTML = renderMarkdown(fullContent);
@@ -468,6 +476,7 @@ async function sendMessage_fromHistory(c) {
     removeTypingIndicator();
     const assistantMsg = appendMessage('assistant', '', true);
     const bodyEl = assistantMsg.querySelector('.message-body');
+    const statusEl = assistantMsg.querySelector('.message-status');
     let fullContent = '';
 
     const reader = res.body.getReader();
@@ -488,6 +497,12 @@ async function sendMessage_fromHistory(c) {
           if (dataStr === '[DONE]') break;
           try {
             const json = JSON.parse(dataStr);
+            if (json.status !== undefined) {
+              if (json.status) { statusEl.textContent = json.status; statusEl.style.display = 'inline-block'; }
+              else { statusEl.style.display = 'none'; }
+              scrollBottom();
+              continue;
+            }
             const delta = json.choices[0]?.delta?.content || '';
             fullContent += delta;
             bodyEl.innerHTML = renderMarkdown(fullContent);

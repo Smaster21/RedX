@@ -2,7 +2,7 @@
 RedX Proxy — bypasses Fortinet SSL inspection
 Uses aiohttp with fully disabled SSL verification.
 """
-import asyncio, json, ssl, traceback, os, aiohttp
+import asyncio, json, ssl, traceback, os, aiohttp, random
 from flask import Flask, request, Response, stream_with_context
 from flask_cors import CORS
 
@@ -84,63 +84,83 @@ def proxy(endpoint):
                     user_input = m.get("content")
                     break
             
-            # 1. Quick Search (Enhanced)
-            print(f"[*] Searching for: {user_input}")
-            search_results = ""
-            try:
-                # Force search to focus on latest 2026 data
-                search_results = search_tool.run(f"2026 update: {user_input}")
-                print(f"[*] Search found: {len(search_results)} chars")
-            except Exception as e:
-                print(f"[!] Search failed: {str(e)}")
-
-            # 2. Augment Prompt
-            search_context = f"\n\n--- 2026 LIVE SEARCH RESULTS ---\n{search_results}\n---------------------------------\n" if search_results else ""
-
-            augmented_messages = []
-            has_system = False
-            for m in messages:
-                msg_copy = m.copy()
-                if msg_copy.get("role") == "system" and search_context:
-                    msg_copy["content"] = msg_copy["content"] + "\n\n[DEEP FACT-CHECKING]: Use the above search results for any numbers or counts. Ignore your 2024 data if it differs." + search_context
-                    has_system = True
-                augmented_messages.append(msg_copy)
-            
-            if not has_system and search_context:
-                instr = (
-                    "CRITICAL GUARDRAIL: Your internal knowledge cutoff is 2024. "
-                    "The following SEARCH CONTEXT contains the LATEST information from MAY 2026.\n"
-                    "1. Always prioritize this context over your internal knowledge.\n"
-                    "2. NUMERICAL ACCURACY: If the search results provide a count (e.g. '45 questions'), you MUST use that number.\n"
-                    "3. STRICT-RAG RULE: If specific details are missing, say 'Information Not Found'.\n\n"
-                    f"{search_context}"
-                )
-                augmented_messages.insert(0, {"role": "system", "content": instr})
-            
-            # Lower temperature for deterministic technical reasoning
-            body["temperature"] = 0.1
-            body["messages"] = augmented_messages
-            fwd_headers = {
-                "Authorization": auth,
-                "Content-Type":  "application/json",
-                "HTTP-Referer":  referer,
-                "X-Title":       title,
-            }
-
             if stream:
                 def generate_fast_stream():
                     async def _run():
-                        connector = aiohttp.TCPConnector(ssl=SSL_CTX, force_close=True)
-                        async with aiohttp.ClientSession(connector=connector) as sess:
-                            async with sess.post(url, json=body, headers=fwd_headers) as resp:
-                                if resp.status != 200:
-                                    err = await resp.text()
-                                    print(f"[!] OpenRouter error: {err}")
-                                    yield f"data: {json.dumps({'error': {'message': err}})}\n\n".encode()
-                                    return
-                                async for chunk in resp.content.iter_chunked(1024):
-                                    yield chunk
-                    
+                        # Send initial search status
+                        yield f"data: {json.dumps({'status': f'🔍 Searching 2026 data for: {user_input[:50]}...'})}\n\n".encode()
+                        
+                        # 1. Quick Search (Enhanced)
+                        search_results = ""
+                        try:
+                            search_results = search_tool.run(f"2026 update: {user_input}")
+                        except Exception as e:
+                            print(f"[!] Search failed: {str(e)}")
+
+                        # 2. Augment Prompt (Now inside stream to handle search results)
+                        search_context = f"\n\n--- 2026 LIVE SEARCH RESULTS ---\n{search_results}\n---------------------------------\n" if search_results else ""
+                        if search_results:
+                            yield f"data: {json.dumps({'status': '✅ Factual context retrieved. Synthesizing response...'})}\n\n".encode()
+                        else:
+                            yield f"data: {json.dumps({'status': '⚠️ No new search data found. Using internal 2024 knowledge...'})}\n\n".encode()
+
+                        # Re-build body with search results
+                        aug_msgs = []
+                        has_sys = False
+                        for m in messages:
+                            mc = m.copy()
+                            if mc.get("role") == "system" and search_context:
+                                mc["content"] += "\n\n[DEEP FACT-CHECKING]: Use the above search results for any numbers. " + search_context
+                                has_sys = True
+                            aug_msgs.append(mc)
+                        if not has_sys and search_context:
+                            aug_msgs.insert(0, {"role": "system", "content": f"CRITICAL: Priority is the following 2026 data over your memory:\n{search_context}"})
+                        
+                        body["messages"] = aug_msgs
+                        body["temperature"] = 0.1
+                        fwd_headers = {
+                            "Authorization": auth,
+                            "Content-Type":  "application/json",
+                            "HTTP-Referer":  referer,
+                            "X-Title":       title,
+                        }
+
+                        # 3. Super-Retry Loop
+                        for attempt in range(10):
+                            connector = aiohttp.TCPConnector(ssl=SSL_CTX, force_close=True)
+                            try:
+                                async with aiohttp.ClientSession(connector=connector) as sess:
+                                    async with sess.post(url, json=body, headers=fwd_headers, timeout=120) as resp:
+                                        if resp.status == 429 or resp.status == 503:
+                                            wait = (2 ** attempt) + random.uniform(0, 1)
+                                            yield f"data: {json.dumps({'status': f'⏳ Model busy. Retrying in {wait:.1f}s (Attempt {attempt+1}/10)...'})}\n\n".encode()
+                                            await asyncio.sleep(wait)
+                                            continue
+                                        
+                                        if resp.status != 200:
+                                            err = await resp.text()
+                                            if "busy" in err.lower() or "limit" in err.lower():
+                                                wait = (2 ** attempt) + random.uniform(0, 1)
+                                                yield f"data: {json.dumps({'status': f'⏳ Model reported busy. Retrying in {wait:.1f}s...'})}\n\n".encode()
+                                                await asyncio.sleep(wait)
+                                                continue
+                                            yield f"data: {json.dumps({'error': {'message': err}})}\n\n".encode()
+                                            return
+                                            
+                                        # Clear status before showing actual response
+                                        yield f"data: {json.dumps({'status': ''})}\n\n".encode()
+                                        
+                                        async for chunk in resp.content.iter_chunked(1024):
+                                            yield chunk
+                                        return 
+                            except Exception as e:
+                                if attempt < 9: 
+                                    yield f"data: {json.dumps({'status': f'⚠️ Connection error. Retrying...'})}\n\n".encode()
+                                    await asyncio.sleep(1)
+                                    continue
+                                yield f"data: {json.dumps({'error': {'message': str(e)}})}\n\n".encode()
+                                return
+
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
@@ -149,7 +169,6 @@ def proxy(endpoint):
                             try: yield loop.run_until_complete(ait.__anext__())
                             except StopAsyncIteration: break
                             except Exception as e:
-                                print(f"[!] Stream error: {e}")
                                 break
                     finally: loop.close()
 
