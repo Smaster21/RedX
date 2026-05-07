@@ -19,10 +19,7 @@ Unlike standard chatbots that "guess" when they don't know an answer, RedX is pr
 - **Deterministic Reasoning**: Forced `temperature: 0.1` for absolute literal accuracy.
 - **Verification Rule**: If a specific technical detail (CVE, version, exploit path) is not found in the live search results, RedX outputs **"Information Not Found"** instead of hallucinating.
 
-### 3. Fortinet & Corporate Proxy Bypass
-Designed for use in restricted environments, the RedX Proxy includes a built-in SSL-bypass layer that allows it to function behind Fortinet SSL inspection and other corporate firewalls without certificate errors.
-
-### 4. Client-Side Encrypted Vault
+### 3. Client-Side Encrypted Vault
 Your API keys never leave your machine in plain text. RedX uses a **browser-based AES-256-GCM Vault** to encrypt your keys with a master password. Decryption happens only in memory at runtime.
 
 ---
@@ -43,7 +40,7 @@ graph LR
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/RedX.git
+git clone https://github.com/Smaster21/RedX.git
 cd RedX
 ```
 
