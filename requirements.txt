@@ -1,0 +1,11 @@
+langchain
+langchain-openai
+langchain-community
+langchain-classic
+duckduckgo-search
+ddgs
+flask
+flask-cors
+aiohttp
+httpx
+pydantic
