@@ -1,0 +1,13 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 27504.51it/s]
+/home/kali/Desktop/OPENROUTE/proxy.py:76: LangChainDeprecationWarning: langchain_classic.hub.pull is deprecated. Use the LangSmith SDK instead.
+  REACT_PROMPT = hub.pull("hwchase17/react")
+=======================================================
+  RedX Proxy (LangChain Enabled)  →  http://localhost:3000
+  Fortinet bypass: SSL cert check DISABLED
+  Tools: DuckDuckGo Search
+=======================================================
+ * Serving Flask app 'proxy'
+ * Debug mode: off
+Address already in use
+Port 3000 is in use by another program. Either identify and stop that program, or start the server with a different port.
