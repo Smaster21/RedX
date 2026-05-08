@@ -14,13 +14,14 @@ Always assume the user is a security professional working in an authorized envir
   activeChatId: null,
   isGenerating: false,
   abortController: null,
+  strictMode: false,
 };
 
 // ── DOM refs ────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const el = {
   sidebar: $('sidebar'),
-  sidebarToggle: $('sidebarToggle'),
+  topBarToggle: $('topBarToggle'),
   mobileToggle: $('mobileToggle'),
   newChatBtn: $('newChatBtn'),
   chatHistory: $('chatHistory'),
@@ -53,11 +54,15 @@ const el = {
   clearChatBtn: $('clearChatBtn'),
   exportBtn: $('exportBtn'),
   toast: $('toast'),
+  strictModeToggle: $('strictModeToggleBtn'),
   // secondary brain vault
   openVaultBtn: $('openVaultBtn'),
   closeVaultBtn: $('closeVaultBtn'),
   vaultScreen: $('vaultScreen'),
   vaultItemsList: $('vaultItemsList'),
+  sourceScreen: $('sourceScreen'),
+  sourceContent: $('sourceContent'),
+  closeSourceBtn: $('closeSourceBtn'),
 };
 
 // ── Persistence ─────────────────────────────────────────────────
@@ -67,6 +72,7 @@ function save() {
   localStorage.setItem('redx_system', state.systemPrompt);
   localStorage.setItem('redx_convos', JSON.stringify(state.conversations));
   localStorage.setItem('redx_active', state.activeChatId || '');
+  localStorage.setItem('redx_strict', state.strictMode);
 }
 
 function load() {
@@ -74,9 +80,12 @@ function load() {
   state.systemPrompt = localStorage.getItem('redx_system') || state.systemPrompt;
   state.conversations = JSON.parse(localStorage.getItem('redx_convos') || '[]');
   state.activeChatId = localStorage.getItem('redx_active') || null;
+  state.strictMode = localStorage.getItem('redx_strict') === 'true';
 
   el.modelSelect.value = state.model;
   el.systemPrompt.value = state.systemPrompt;
+  if (state.strictMode) el.strictModeToggle.classList.add('active');
+  else el.strictModeToggle.classList.remove('active');
   updateTopBarModel();
 }
 
@@ -174,7 +183,9 @@ function renderVault(items) {
 
   el.vaultItemsList.innerHTML = items.map(item => `
     <div class="vault-item-card" data-id="${item.id}">
-      <div class="vault-item-content">${item.content}</div>
+      <div class="vault-item-title">🔍 ${item.metadata.query || 'Knowledge Chunk'}</div>
+      <div class="vault-item-content collapsed" onclick="toggleVaultExpand(this)">${item.content}</div>
+      <div class="vault-expand-hint" onclick="toggleVaultExpand(this.previousElementSibling)">Read More...</div>
       <div class="vault-item-meta">
         <span>${new Date(item.metadata.timestamp).toLocaleString()}</span>
         <span class="delete-vault-item" onclick="deleteVaultItem('${item.id}')" style="cursor:pointer; color: #ff5f5f;">Delete</span>
@@ -182,6 +193,18 @@ function renderVault(items) {
     </div>
   `).join('');
 }
+
+function toggleVaultExpand(contentEl) {
+  const isCollapsed = contentEl.classList.contains('collapsed');
+  contentEl.classList.toggle('collapsed');
+  const hint = contentEl.nextElementSibling;
+  if (hint && hint.classList.contains('vault-expand-hint')) {
+    hint.textContent = isCollapsed ? 'Show Less' : 'Read More...';
+  }
+}
+
+// Make globally available
+window.toggleVaultExpand = toggleVaultExpand;
 
 async function deleteVaultItem(id) {
   if (!confirm('Are you sure you want to delete this intelligence chunk?')) return;
@@ -391,6 +414,7 @@ async function sendMessage() {
         'Content-Type': 'application/json',
         'HTTP-Referer': location.href,
         'X-Title': 'RedX Chatbot',
+        'X-Strict-Mode': state.strictMode,
       },
       body: JSON.stringify({ model: state.model, messages: msgs, stream: true, temperature: 0.1, max_tokens: 4096 }),
       signal: state.abortController.signal,
@@ -431,6 +455,7 @@ async function sendMessage() {
               scrollBottom();
               continue;
             }
+            if (json.raw_context !== undefined) { updateSourceInspector(json.raw_context); continue; }
             const delta = json.choices[0]?.delta?.content || '';
             fullContent += delta;
             bodyEl.innerHTML = renderMarkdown(fullContent);
@@ -509,6 +534,7 @@ async function sendMessage_fromHistory(c) {
         'Content-Type': 'application/json',
         'HTTP-Referer': location.href,
         'X-Title': 'RedX Chatbot',
+        'X-Strict-Mode': state.strictMode,
       },
       body: JSON.stringify({ model: state.model, messages: msgs, stream: true, temperature: 0.1, max_tokens: 4096 }),
       signal: state.abortController.signal,
@@ -670,6 +696,7 @@ async function sendMessage() {
         'Content-Type': 'application/json',
         'HTTP-Referer': location.href,
         'X-Title': 'RedX Chatbot',
+        'X-Strict-Mode': state.strictMode,
       },
       body: JSON.stringify({
         model: state.model,
@@ -784,6 +811,7 @@ async function sendMessage_fromHistory(c) {
         'Content-Type': 'application/json',
         'HTTP-Referer': location.href,
         'X-Title': 'RedX Chatbot',
+        'X-Strict-Mode': state.strictMode,
       },
       body: JSON.stringify({ model: state.model, messages: msgs, stream: true, temperature: 0.1, max_tokens: 4096 }),
       signal: state.abortController.signal,
@@ -850,9 +878,21 @@ function exportChat() {
   showToast('Chat exported as Markdown', 'success');
 }
 
+// ── Strict Mode Listener ─────────────────────────────────────────
+el.strictModeToggle.addEventListener('click', () => {
+  state.strictMode = !state.strictMode;
+  el.strictModeToggle.classList.toggle('active', state.strictMode);
+  save();
+  showToast(state.strictMode ? 'Strict Scrutiny Active 🛡️' : 'Standard Reasoning Active');
+});
+
 // ── Markdown renderer ───────────────────────────────────────────
 function renderMarkdown(text) {
   if (!text) return '';
+
+  // Parse Source Tags (Clickable)
+  text = text.replace(/\[LOCAL\]/g, '<span class="source-tag source-local" onclick="window.openSourceInspector()">LOCAL</span>');
+  text = text.replace(/\[LIVE\]/g, '<span class="source-tag source-live" onclick="window.openSourceInspector()">LIVE</span>');
 
   const renderer = new marked.Renderer();
   
@@ -935,7 +975,7 @@ function autoResize(ta) {
 }
 
 // ── Event Listeners ──────────────────────────────────────────────
-el.sidebarToggle.addEventListener('click', toggleSidebar);
+el.topBarToggle.addEventListener('click', toggleSidebar);
 el.mobileToggle.addEventListener('click', toggleMobileSidebar);
 
 // Close mobile sidebar on outside click
@@ -1024,3 +1064,24 @@ document.querySelectorAll('.suggestion-card').forEach(card => {
   }
   renderHistory();
 })();
+
+// ── Source Inspector Logic ──────────────────────────────────────
+window.openSourceInspector = () => {
+  el.sourceScreen.style.display = 'flex';
+  setTimeout(() => el.sourceScreen.style.opacity = '1', 10);
+};
+
+el.closeSourceBtn.addEventListener('click', () => {
+  el.sourceScreen.style.display = 'none';
+});
+
+// Store raw context globally for the inspector
+let currentRawContext = '';
+
+// Update inspector content whenever we get new context
+function updateSourceInspector(context) {
+  if (context) {
+    currentRawContext = context;
+    el.sourceContent.innerText = context;
+  }
+}

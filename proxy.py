@@ -12,6 +12,8 @@ from langchain_openai import ChatOpenAI
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_classic.agents import AgentExecutor, create_react_agent
 from langchain_classic import hub
+from bs4 import BeautifulSoup
+import re
 
 app = Flask(__name__)
 CORS(app, origins="*")
@@ -34,15 +36,62 @@ SSL_CTX.check_hostname = False
 SSL_CTX.verify_mode = ssl.CERT_NONE
 SSL_CTX.set_ciphers("ALL:@SECLEVEL=0")
 
-# --- Knowledge Distillation Helper ---
+async def fetch_url_content(url):
+    """Fetches real webpage content, bypassing search engines. Includes Deep Scrape for GitHub."""
+    github_match = re.search(r"https?://github\.com/([^/]+)/([^/]+)", url)
+    if github_match:
+        owner, repo = github_match.groups()
+        repo = repo.replace(".git", "")
+        api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/"
+        readme_url = f"https://raw.githubusercontent.com/{owner}/{repo}/main/README.md"
+        output = f"--- ORIGINAL VERIFIED DATA ---\nGITHUB REPO: {owner}/{repo}\n"
+        
+        try:
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=SSL_CTX)) as session:
+                async with session.get(readme_url) as resp:
+                    if resp.status == 200:
+                        output += f"\n--- README.md ---\n{(await resp.text())[:5000]}\n"
+                
+                async with session.get(api_url) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        output += "\n--- ROOT DIRECTORY ---"
+                        for item in data:
+                            output += f"\n- {item['name']} ({item['type']})"
+                            if item['type'] == 'dir' and item['name'].lower() in ['skills', 'tools', 'scripts', 'src']:
+                                async with session.get(item['url']) as sub_resp:
+                                    if sub_resp.status == 200:
+                                        output += f"\n  --- CONTENTS OF {item['name']} ---"
+                                        for sub_item in await sub_resp.json():
+                                            output += f"\n  - {sub_item['name']}"
+        except Exception as e:
+            output += f"\nError fetching GitHub data: {e}"
+        return output
+
+    # Generic webpage handling
+    try:
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=SSL_CTX)) as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    soup = BeautifulSoup(await resp.text(), "html.parser")
+                    text = soup.get_text(separator='\n', strip=True)
+                    return f"--- ORIGINAL VERIFIED DATA ---\n{text[:15000]}"
+                else:
+                    return f"Failed to fetch {url}. Status code: {resp.status}"
+    except Exception as e:
+        return f"Error fetching {url}: {e}"
+
 async def distill_knowledge(api_key, model, query, raw_results):
     """
     Uses the LLM to summarize raw search results into a high-density entry for the local brain.
     """
-    prompt = f"""You are the RedX Knowledge Librarian. 
-Summarize the following live search results into a high-density security intelligence entry.
-Focus on: CVE details, actual exploit steps, new 2026 methodology, or specific technical data.
-Be extremely concise. Do not use conversational filler. Return ONLY the summarized entry.
+    prompt = f"""You are the RedX Scrutiny Librarian. 
+Your task is to extract ORIGINAL technical data from the search results below.
+CRITICAL RULES:
+1. Do NOT guess. If a specific tool, CVE, or feature is not explicitly mentioned in the text, DO NOT include it.
+2. If the text is messy or unrelated, return "NO_VERIFIED_DATA".
+3. Prioritize file names, directories, and code snippets found in the raw results.
+4. If you see a repository (like GitHub), look for the 'skills/', 'tools/', or 'scripts/' folder mentions.
 
 Search Query: {query}
 Raw Results: {raw_results}
@@ -111,6 +160,8 @@ def proxy(endpoint):
     auth    = request.headers.get("Authorization", "")
     referer = request.headers.get("HTTP-Referer", "http://localhost:8080")
     title   = request.headers.get("X-Title", "RedX Chatbot")
+    strict_mode = request.headers.get("X-Strict-Mode") == "true"
+    print(f"[DEBUG] Request for {endpoint} | Strict Mode: {strict_mode}")
     body    = request.get_json(silent=True) or {}
     url     = f"{OPENROUTER}/{endpoint}"
     stream  = body.get("stream", False)
@@ -138,18 +189,32 @@ def proxy(endpoint):
                         local_text = "\n".join(local_context) if local_context else ""
                         
                         search_results = ""
-                        if not local_text:
-                            # 2. Live Web Search (Third Brain)
+                        # 2. Smart Retrieval (URL vs Search)
+                        import re
+                        url_match = re.search(r"https?://[^\s]+", user_input)
+                        
+                        if url_match:
+                            target_url = url_match.group(0)
+                            yield f"data: {json.dumps({'status': f'📡 Accessing Original Source: {target_url[:40]}...'})}\n\n".encode()
+                            try:
+                                search_results = await fetch_url_content(target_url)
+                            except Exception as e:
+                                print(f"[!] URL access failed: {str(e)}")
+                        else:
                             yield f"data: {json.dumps({'status': f'🔍 Searching 2026 data for: {user_input[:50]}...'})}\n\n".encode()
                             try:
                                 search_results = await asyncio.to_thread(search_tool.run, f"2026 update: {user_input}")
-                                if search_results:
-                                    # 3. Knowledge Distillation & Ingestion
-                                    yield f"data: {json.dumps({'status': '📥 Ingesting new knowledge...'})}\n\n".encode()
-                                    summary = await distill_knowledge(api_key, model_name, user_input, search_results)
-                                    engine.add_knowledge(summary, {"query": user_input})
                             except Exception as e:
                                 print(f"[!] Search failed: {str(e)}")
+
+                        if search_results:
+                            try:
+                                # 3. Knowledge Distillation & Ingestion
+                                yield f"data: {json.dumps({'status': '📥 Ingesting new knowledge...'})}\n\n".encode()
+                                summary = await distill_knowledge(api_key, model_name, user_input, search_results)
+                                engine.add_knowledge(summary, {"query": user_input})
+                            except Exception as e:
+                                print(f"[!] Knowledge ingestion failed: {str(e)}")
 
                         # 4. Final Context Augmentation
                         final_context = ""
@@ -165,21 +230,48 @@ def proxy(endpoint):
                             yield f"data: {json.dumps({'status': '⚠️ No specific data found. Using core intelligence...'})}\n\n".encode()
                         
                         search_context = final_context # Reuse the variable name for downstream logic
+                        
+                        # LOGGING: Write context to a file for audit
+                        try:
+                            with open("/home/kali/Desktop/OPENROUTE/last_context.log", "w") as f:
+                                f.write(f"STRICT_MODE: {strict_mode}\n")
+                                f.write(f"CONTEXT:\n{search_context}\n")
+                        except: pass
 
                         # Re-build body with search results
                         aug_msgs = []
                         has_sys = False
+                        
+                        # Scrutiny Engine System Instruction
+                        scrutiny_instr = f"""
+### SCRUTINY ENGINE ACTIVE ###
+You are now in **Strict Verification Mode**. 
+The following block contains ORIGINAL DATA retrieved from live 2026 sources and local memory.
+1. Use the data below as your ONLY source for technical specifications (CVEs, tool features, skill lists).
+2. If the data below contradicts your internal training data, the data below is the ABSOLUTE TRUTH.
+3. If you cannot find a specific answer in the block below, say "I cannot verify this detail from the provided sources" instead of guessing.
+4. Cite sources as [LOCAL] or [LIVE] where appropriate.
+
+--- ORIGINAL VERIFIED DATA ---
+{search_context}
+------------------------------
+"""
+
                         for m in messages:
                             mc = m.copy()
-                            if mc.get("role") == "system" and search_context:
-                                mc["content"] += "\n\n[DEEP FACT-CHECKING]: Use the above search results for any numbers. " + search_context
+                            if mc.get("role") == "system":
+                                mc["content"] += "\n\n" + scrutiny_instr
                                 has_sys = True
                             aug_msgs.append(mc)
-                        if not has_sys and search_context:
-                            aug_msgs.insert(0, {"role": "system", "content": f"CRITICAL: Priority is the following 2026 data over your memory:\n{search_context}"})
+                        if not has_sys:
+                            aug_msgs.insert(0, {"role": "system", "content": scrutiny_instr})
+                        
+                        # Final Scrutiny Anchor (at the very end of context)
+                        if strict_mode:
+                            aug_msgs.append({"role": "system", "content": "FINAL WARNING: You are in STRICT MODE. If the information is not in the --- ORIGINAL VERIFIED DATA --- block, you MUST say 'Information not found'. Do NOT guess."})
                         
                         body["messages"] = aug_msgs
-                        body["temperature"] = 0.1
+                        body["temperature"] = 0.0 if strict_mode else 0.1
                         fwd_headers = {
                             "Authorization": auth,
                             "Content-Type":  "application/json",
@@ -214,6 +306,9 @@ def proxy(endpoint):
                                         
                                         async for chunk in resp.content.iter_chunked(1024):
                                             yield chunk
+                                        
+                                        if search_context:
+                                            yield f"data: {json.dumps({'raw_context': search_context})}\n\n".encode()
                                         return 
                             except Exception as e:
                                 if attempt < 9: 

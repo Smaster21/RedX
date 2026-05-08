@@ -1,30 +1,27 @@
 nohup: ignoring input
-Traceback (most recent call last):
-  File "<frozen runpy>", line 198, in _run_module_as_main
-  File "<frozen runpy>", line 88, in _run_code
-  File "/usr/lib/python3.13/http/server.py", line 1345, in <module>
-    test(
-    ~~~~^
-        HandlerClass=handler_class,
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ...<3 lines>...
-        protocol=args.protocol,
-        ^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/usr/lib/python3.13/http/server.py", line 1292, in test
-    with ServerClass(addr, HandlerClass) as httpd:
-         ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.13/socketserver.py", line 457, in __init__
-    self.server_bind()
-    ~~~~~~~~~~~~~~~~^^
-  File "/usr/lib/python3.13/http/server.py", line 1339, in server_bind
-    return super().server_bind()
-           ~~~~~~~~~~~~~~~~~~~^^
-  File "/usr/lib/python3.13/http/server.py", line 140, in server_bind
-    socketserver.TCPServer.server_bind(self)
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/usr/lib/python3.13/socketserver.py", line 478, in server_bind
-    self.socket.bind(self.server_address)
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
-OSError: [Errno 98] Address already in use
+127.0.0.1 - - [08/May/2026 08:23:22] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [08/May/2026 08:23:23] "GET /style.css HTTP/1.1" 304 -
+127.0.0.1 - - [08/May/2026 08:23:23] "GET /app.js HTTP/1.1" 304 -
+127.0.0.1 - - [08/May/2026 08:23:24] code 404, message File not found
+127.0.0.1 - - [08/May/2026 08:23:24] "GET /favicon.ico HTTP/1.1" 404 -
+127.0.0.1 - - [08/May/2026 08:27:44] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [08/May/2026 08:48:27] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [08/May/2026 08:48:27] "GET /app.js HTTP/1.1" 304 -
+127.0.0.1 - - [08/May/2026 08:48:27] "GET /style.css HTTP/1.1" 304 -
+127.0.0.1 - - [08/May/2026 08:48:29] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [08/May/2026 09:30:41] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [08/May/2026 09:30:41] "GET /app.js HTTP/1.1" 200 -
+127.0.0.1 - - [08/May/2026 09:30:41] "GET /style.css HTTP/1.1" 200 -
+127.0.0.1 - - [08/May/2026 09:30:41] "GET /vault.js HTTP/1.1" 304 -
+127.0.0.1 - - [08/May/2026 09:30:44] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [08/May/2026 09:30:44] "GET /style.css HTTP/1.1" 304 -
+127.0.0.1 - - [08/May/2026 09:30:44] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [08/May/2026 09:32:33] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [08/May/2026 09:32:33] "GET /style.css HTTP/1.1" 200 -
+127.0.0.1 - - [08/May/2026 09:32:33] "GET /app.js HTTP/1.1" 304 -
+127.0.0.1 - - [08/May/2026 09:33:53] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [08/May/2026 09:33:53] "GET /style.css HTTP/1.1" 200 -
+127.0.0.1 - - [08/May/2026 09:33:53] "GET /app.js HTTP/1.1" 200 -
+127.0.0.1 - - [08/May/2026 09:36:27] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [08/May/2026 09:36:28] "GET /style.css HTTP/1.1" 200 -
+127.0.0.1 - - [08/May/2026 09:36:28] "GET /app.js HTTP/1.1" 200 -
