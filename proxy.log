@@ -1,27 +1,0 @@
-Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 4974.99it/s]
-/home/kali/Desktop/OPENROUTE/proxy.py:125: LangChainDeprecationWarning: langchain_classic.hub.pull is deprecated. Use the LangSmith SDK instead.
-  REACT_PROMPT = hub.pull("hwchase17/react")
-=======================================================
-  RedX Proxy (LangChain Enabled)  →  http://localhost:3000
-  Fortinet bypass: SSL cert check DISABLED
-  Tools: DuckDuckGo Search
-=======================================================
- * Serving Flask app 'proxy'
- * Debug mode: off
-WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
- * Running on all addresses (0.0.0.0)
- * Running on http://127.0.0.1:3000
- * Running on http://10.0.2.15:3000
-Press CTRL+C to quit
-127.0.0.1 - - [08/May/2026 08:59:42] "POST /proxy/v1/chat/completions HTTP/1.1" 200 -
-127.0.0.1 - - [08/May/2026 09:05:00] "POST /proxy/v1/chat/completions HTTP/1.1" 200 -
-127.0.0.1 - - [08/May/2026 09:18:17] "OPTIONS /proxy/v1/chat/completions HTTP/1.1" 200 -
-127.0.0.1 - - [08/May/2026 09:18:17] "POST /proxy/v1/chat/completions HTTP/1.1" 200 -
-Exception ignored in: <async_generator object proxy.<locals>.generate_fast_stream.<locals>._run at 0x7f8f1c03b0c0>
-Traceback (most recent call last):
-  File "/usr/lib/python3/dist-packages/werkzeug/wrappers/response.py", line 403, in close
-    self.response.close()
-RuntimeError: async generator ignored GeneratorExit
-127.0.0.1 - - [08/May/2026 09:23:00] "OPTIONS /proxy/v1/chat/completions HTTP/1.1" 200 -
-127.0.0.1 - - [08/May/2026 09:23:00] "POST /proxy/v1/chat/completions HTTP/1.1" 200 -
