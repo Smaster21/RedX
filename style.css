@@ -2,20 +2,20 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:        #0a0b0f;
-  --surface:   #111318;
-  --surface2:  #191c24;
-  --border:    rgba(255,255,255,0.07);
-  --border2:   rgba(255,255,255,0.12);
-  --text:      #e8eaf0;
-  --text2:     #8b90a0;
-  --text3:     #555a6e;
-  --accent:    #7c6dfa;
-  --accent2:   #a78bfa;
-  --accent-glow: rgba(124,109,250,0.35);
-  --green:     #34d399;
-  --red:       #f87171;
-  --amber:     #fbbf24;
+  --bg:        #050505;
+  --surface:   #0c0c0c;
+  --surface2:  #141414;
+  --border:    rgba(220,20,60,0.12);
+  --border2:   rgba(220,20,60,0.22);
+  --text:      #e0e0e0;
+  --text2:     #7a7a7a;
+  --text3:     #4a4a4a;
+  --accent:    #dc143c;
+  --accent2:   #ff2d55;
+  --accent-glow: rgba(220,20,60,0.35);
+  --green:     #00e676;
+  --red:       #ff1744;
+  --amber:     #ffab00;
   --sidebar-w: 280px;
   --radius:    14px;
   --radius-sm: 8px;
@@ -248,7 +248,7 @@ body {
 }
 @keyframes pulse-glow {
   0%,100% { box-shadow: 0 0 40px var(--accent-glow); }
-  50%      { box-shadow: 0 0 60px rgba(124,109,250,0.5); }
+  50%      { box-shadow: 0 0 60px rgba(220,20,60,0.5); }
 }
 .welcome-title {
   font-size: 2rem; font-weight: 700; letter-spacing: -0.04em;
@@ -376,8 +376,8 @@ body {
   color: var(--text2); cursor: pointer; font-family: var(--font); font-weight: 500;
   transition: all 0.2s;
 }
-.copy-code-btn:hover { background: rgba(124,109,250,0.2); color: var(--accent2); border-color: var(--accent2); }
-.copy-code-btn.copied { color: var(--green); border-color: var(--green); background: rgba(52,211,153,0.1); }
+.copy-code-btn:hover { background: rgba(220,20,60,0.15); color: var(--accent2); border-color: var(--accent2); }
+.copy-code-btn.copied { color: var(--green); border-color: var(--green); background: rgba(0,230,118,0.1); }
 
 .message-body pre { margin: 0; padding: 0; background: transparent; border: none; }
 .message-body pre code.hljs {
@@ -469,11 +469,11 @@ body {
 
 .send-btn {
   width: 38px; height: 38px; border-radius: 10px;
-  background: linear-gradient(135deg, var(--accent), var(--accent2));
-  border: none; color: #fff; cursor: pointer;
+  background: linear-gradient(135deg, #00c853, #00e676);
+  border: none; color: #000; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
-  box-shadow: 0 0 16px var(--accent-glow);
+  box-shadow: 0 0 16px rgba(0,230,118,0.35);
   flex-shrink: 0;
 }
 .send-btn:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; }
@@ -545,10 +545,10 @@ body {
   border: 1px solid var(--border2); flex: 1;
 }
 .vault-btn-danger {
-  background: rgba(248,113,113,0.12); color: var(--red);
-  border: 1px solid rgba(248,113,113,0.25); flex: 1;
+  background: rgba(255,23,68,0.12); color: var(--red);
+  border: 1px solid rgba(255,23,68,0.25); flex: 1;
 }
-.vault-btn-danger:hover { background: rgba(248,113,113,0.2); }
+.vault-btn-danger:hover { background: rgba(255,23,68,0.2); }
 .vault-actions { display: flex; gap: 6px; margin-top: 4px; }
 .vault-lock-icon {
   display: flex; align-items: center; justify-content: center;
