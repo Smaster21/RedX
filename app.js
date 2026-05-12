@@ -14,7 +14,8 @@ Always assume the user is a security professional working in an authorized envir
   activeChatId: null,
   isGenerating: false,
   abortController: null,
-  strictMode: false,
+  strictMode: true,
+  promptRefiner: true,
 };
 
 // ── DOM refs ────────────────────────────────────────────────────
@@ -52,9 +53,11 @@ const el = {
   stopBtn: document.getElementById('stopBtn'),
   charCount: document.getElementById('charCount'),
   clearChatBtn: $('clearChatBtn'),
+  renameChatBtn: $('renameChatBtn'),
   exportBtn: $('exportBtn'),
   toast: $('toast'),
   strictModeToggle: $('strictModeToggleBtn'),
+  refinerToggle: $('refinerToggleBtn'),
   // secondary brain vault
   openVaultBtn: $('openVaultBtn'),
   closeVaultBtn: $('closeVaultBtn'),
@@ -86,6 +89,9 @@ function load() {
   el.systemPrompt.value = state.systemPrompt;
   if (state.strictMode) el.strictModeToggle.classList.add('active');
   else el.strictModeToggle.classList.remove('active');
+
+  if (state.promptRefiner) el.refinerToggle.classList.add('active');
+  else el.refinerToggle.classList.remove('active');
   updateTopBarModel();
 }
 
@@ -298,12 +304,32 @@ function activeConvo() {
 function clearChat() {
   const c = activeConvo();
   if (!c) return;
-  c.messages = [];
-  c.title = 'New Chat';
+  if (!confirm('Are you sure you want to delete this chat permanently?')) return;
+  
+  state.conversations = state.conversations.filter(convo => convo.id !== c.id);
+  
+  if (state.conversations.length > 0) {
+    state.activeChatId = state.conversations[state.conversations.length - 1].id;
+  } else {
+    newChat();
+    return; // newChat() already calls renderHistory and renderMessages
+  }
+  
   renderHistory();
   renderMessages();
   save();
-  showToast('Chat cleared');
+  showToast('Chat deleted');
+}
+
+function renameChat() {
+  const c = activeConvo();
+  if (!c) return;
+  const newName = prompt('Enter new chat name:', c.title);
+  if (newName !== null && newName.trim() !== '') {
+    c.title = newName.trim();
+    renderHistory();
+    save();
+  }
 }
 
 // ── Render Messages ──────────────────────────────────────────────
@@ -321,6 +347,7 @@ function renderMessages() {
 
   c.messages.forEach(m => appendMessage(m.role, m.content, false));
   scrollBottom();
+  renderMermaidDiagrams();
 }
 
 function appendMessage(role, content, animate = true) {
@@ -343,17 +370,35 @@ function appendMessage(role, content, animate = true) {
         <span class="message-time">${time}</span>
       </div>
       <div class="message-status" style="display:none;"></div>
-      <div class="message-body">${role === 'assistant' ? renderMarkdown(content) : `<span>${escHtml(content)}</span>`}</div>
+      <div class="message-body">${renderMarkdown(content)}</div>
       <div class="message-actions">
         <button class="msg-action-btn" data-action="copy">Copy</button>
-        ${role === 'assistant' ? '<button class="msg-action-btn" data-action="regen">↺ Retry</button>' : ''}
+        ${role === 'assistant' ? '<button class="msg-action-btn" data-action="regen">↺ Retry</button>' : '<button class="msg-action-btn" data-action="edit">✎ Edit</button>'}
       </div>
     </div>`;
 
   msg.querySelectorAll('[data-action]').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (btn.dataset.action === 'copy') { navigator.clipboard.writeText(content); showToast('Copied!', 'success'); }
-      if (btn.dataset.action === 'regen') regenerate();
+      const action = btn.dataset.action;
+      if (action === 'copy') { 
+        navigator.clipboard.writeText(content); 
+        showToast('Copied!', 'success'); 
+      } else if (action === 'regen') { 
+        regenerate(); 
+      } else if (action === 'edit') {
+        el.messageInput.value = content;
+        el.messageInput.focus();
+        el.messageInput.style.height = 'auto';
+        el.messageInput.style.height = el.messageInput.scrollHeight + 'px';
+        
+        const c = activeConvo();
+        const msgIndex = c.messages.findIndex(m => m.content === content && m.role === 'user');
+        if (msgIndex !== -1) {
+          c.messages = c.messages.slice(0, msgIndex);
+          renderMessages();
+          save();
+        }
+      }
     });
   });
 
@@ -415,6 +460,7 @@ async function sendMessage() {
         'HTTP-Referer': location.href,
         'X-Title': 'RedX Chatbot',
         'X-Strict-Mode': state.strictMode,
+        'X-Prompt-Refiner': state.promptRefiner,
       },
       body: JSON.stringify({ model: state.model, messages: msgs, stream: true, temperature: 0.1, max_tokens: 4096 }),
       signal: state.abortController.signal,
@@ -535,6 +581,7 @@ async function sendMessage_fromHistory(c) {
         'HTTP-Referer': location.href,
         'X-Title': 'RedX Chatbot',
         'X-Strict-Mode': state.strictMode,
+        'X-Prompt-Refiner': state.promptRefiner,
       },
       body: JSON.stringify({ model: state.model, messages: msgs, stream: true, temperature: 0.1, max_tokens: 4096 }),
       signal: state.abortController.signal,
@@ -669,6 +716,10 @@ async function sendMessage() {
   el.messageInput.value = '';
   el.messageInput.style.height = 'auto';
   updateCharCount();
+  state.currentRefinedPrompt = null;
+  
+  // Render any user-provided Mermaid code immediately
+  renderMermaidDiagrams();
   
   state.isGenerating = true;
   el.sendBtn.style.display = 'none';
@@ -697,6 +748,7 @@ async function sendMessage() {
         'HTTP-Referer': location.href,
         'X-Title': 'RedX Chatbot',
         'X-Strict-Mode': state.strictMode,
+        'X-Prompt-Refiner': state.promptRefiner,
       },
       body: JSON.stringify({
         model: state.model,
@@ -734,14 +786,28 @@ async function sendMessage() {
         if (data === '[DONE]') break;
         try {
           const json = JSON.parse(data);
+          if (json.status) {
+            updateTypingIndicator(json.status);
+          }
+
+          if (json.refined_prompt) {
+            state.currentRefinedPrompt = json.refined_prompt;
+          }
+
           const delta = json.choices?.[0]?.delta?.content;
           if (delta) {
             fullContent += delta;
-            bodyEl.innerHTML = renderMarkdown(fullContent);
+            // Prepend refined prompt as a 'Mission' block if it exists
+            let displayContent = fullContent;
+            if (state.currentRefinedPrompt) {
+              displayContent = `> [!NOTE]\n> **Refined Mission:** ${state.currentRefinedPrompt}\n\n` + fullContent;
+            }
+            bodyEl.innerHTML = renderMarkdown(displayContent);
+            
             // Re-attach copy listeners
             bodyEl.querySelectorAll('.copy-code-btn').forEach(btn => {
               btn.addEventListener('click', () => {
-                const code = btn.closest('pre')?.querySelector('code')?.textContent || '';
+                const code = btn.closest('.code-block-container')?.querySelector('code')?.textContent || '';
                 navigator.clipboard.writeText(code);
                 btn.textContent = 'Copied!';
                 setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
@@ -754,7 +820,14 @@ async function sendMessage() {
     }
 
     c.messages.push({ role: 'assistant', content: fullContent });
+    if (state.currentRefinedPrompt) {
+        // Optionally store the refined prompt in message metadata
+        c.messages[c.messages.length - 1].refined = state.currentRefinedPrompt;
+    }
     save();
+
+    // Trigger Mermaid rendering ONLY when done to avoid syntax errors on incomplete blocks
+    renderMermaidDiagrams();
 
   } catch (err) {
     if (err.name !== 'AbortError') {
@@ -812,6 +885,7 @@ async function sendMessage_fromHistory(c) {
         'HTTP-Referer': location.href,
         'X-Title': 'RedX Chatbot',
         'X-Strict-Mode': state.strictMode,
+        'X-Prompt-Refiner': state.promptRefiner,
       },
       body: JSON.stringify({ model: state.model, messages: msgs, stream: true, temperature: 0.1, max_tokens: 4096 }),
       signal: state.abortController.signal,
@@ -886,6 +960,13 @@ el.strictModeToggle.addEventListener('click', () => {
   showToast(state.strictMode ? 'Strict Scrutiny Active 🛡️' : 'Standard Reasoning Active');
 });
 
+el.refinerToggle.addEventListener('click', () => {
+  state.promptRefiner = !state.promptRefiner;
+  el.refinerToggle.classList.toggle('active', state.promptRefiner);
+  save();
+  showToast(state.promptRefiner ? 'Prompt Refiner Enabled 🪄' : 'Prompt Refiner Disabled');
+});
+
 // ── Markdown renderer ───────────────────────────────────────────
 function renderMarkdown(text) {
   if (!text) return '';
@@ -893,6 +974,11 @@ function renderMarkdown(text) {
   // Parse Source Tags (Clickable)
   text = text.replace(/\[LOCAL\]/g, '<span class="source-tag source-local" onclick="window.openSourceInspector()">LOCAL</span>');
   text = text.replace(/\[LIVE\]/g, '<span class="source-tag source-live" onclick="window.openSourceInspector()">LIVE</span>');
+
+  // Handle Mission Alert
+  text = text.replace(/> \[!NOTE\]\n> \*\*Refined Mission:\*\* (.*)/g, (match, p1) => {
+    return `<div class="refined-mission"><div class="mission-header">🪄 Refined Mission</div><div class="mission-text">${p1}</div></div>`;
+  });
 
   const renderer = new marked.Renderer();
   
@@ -906,12 +992,29 @@ function renderMarkdown(text) {
     let highlighted;
     
     try {
+      if (language === 'mermaid') {
+        // Aggressive Clean: remove nested backticks, 'mermaid' tags, and non-printable chars
+        let cleanCode = code.replace(/```/g, '').trim();
+        cleanCode = cleanCode.replace(/^mermaid\n?/, '').trim();
+        
+        // Remove common "AI chatter" that ends up in the block
+        cleanCode = cleanCode.split('\n').filter(line => !line.includes('---')).join('\n');
+
+        // Ensure it starts with a valid graph type if missing
+        const validStarters = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'erDiagram', 'pie', 'gantt', 'requirementDiagram'];
+        const firstWord = cleanCode.split(/\s+/)[0];
+        if (!validStarters.includes(firstWord)) {
+            cleanCode = 'graph TD\n' + cleanCode;
+        }
+
+        return `<div class="mermaid">${cleanCode}</div>`;
+      }
       if (language && hljs.getLanguage(language)) {
         highlighted = hljs.highlight(code, { language }).value;
       } else {
         highlighted = hljs.highlightAuto(code).value;
       }
-    } catch (e) {
+    } catch (err) {
       highlighted = code;
     }
     
@@ -1038,6 +1141,7 @@ el.sendBtn.addEventListener('click', () => sendMessage());
 el.stopBtn.addEventListener('click', stopGeneration);
 el.newChatBtn.addEventListener('click', () => newChat());
 el.clearChatBtn.addEventListener('click', clearChat);
+el.renameChatBtn.addEventListener('click', renameChat);
 el.exportBtn.addEventListener('click', exportChat);
 
 // Suggestion cards
@@ -1083,5 +1187,44 @@ function updateSourceInspector(context) {
   if (context) {
     currentRawContext = context;
     el.sourceContent.innerText = context;
+  }
+}
+
+function updateTypingIndicator(status) {
+  const typing = document.querySelector('.typing-indicator-text');
+  if (typing) typing.textContent = status;
+}
+
+// Robust Mermaid Renderer
+async function renderMermaidDiagrams() {
+  const elements = document.querySelectorAll('.mermaid:not([data-processed="true"])');
+  if (elements.length === 0) return;
+  
+  if (!window.mermaid) {
+    setTimeout(renderMermaidDiagrams, 500); // Wait for ES module to load
+    return;
+  }
+
+  for (const el of elements) {
+    const code = el.textContent.trim();
+    if (!code) continue;
+    
+    // Skip if it looks like it's still being typed (no end markers or very short)
+    if (code.length < 10) continue;
+
+    const id = 'mermaid-' + Math.random().toString(36).substr(2, 9);
+    try {
+      // Use render to catch errors and get SVG
+      const { svg } = await mermaid.render(id, code);
+      el.innerHTML = svg;
+      el.setAttribute('data-processed', 'true');
+    } catch (e) {
+      console.error("Mermaid Render Error:", e);
+      // If it's a real error (not just incomplete), show the code as a fallback
+      if (state.isGenerating === false) {
+         el.innerHTML = `<pre style="font-size:10px; color:var(--text3)">${escHtml(code)}</pre>`;
+         el.setAttribute('data-processed', 'true');
+      }
+    }
   }
 }

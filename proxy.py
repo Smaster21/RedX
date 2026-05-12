@@ -38,32 +38,71 @@ SSL_CTX.set_ciphers("ALL:@SECLEVEL=0")
 
 async def fetch_url_content(url):
     """Fetches real webpage content, bypassing search engines. Includes Deep Scrape for GitHub."""
-    github_match = re.search(r"https?://github\.com/([^/]+)/([^/]+)", url)
+    github_match = re.search(r"https?://github\.com/([^/]+)/([^/?#]+)(?:/tree/([^/]+)/(.*))?", url)
     if github_match:
-        owner, repo = github_match.groups()
-        repo = repo.replace(".git", "")
-        api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/"
-        readme_url = f"https://raw.githubusercontent.com/{owner}/{repo}/main/README.md"
+        owner = github_match.group(1)
+        repo = github_match.group(2).replace(".git", "")
+        branch = github_match.group(3) or "main"
+        subpath = github_match.group(4) or ""
+        
+        tree_url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1"
         output = f"--- ORIGINAL VERIFIED DATA ---\nGITHUB REPO: {owner}/{repo}\n"
         
         try:
             async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=SSL_CTX)) as session:
-                async with session.get(readme_url) as resp:
+                async with session.get(tree_url) as resp:
                     if resp.status == 200:
-                        output += f"\n--- README.md ---\n{(await resp.text())[:5000]}\n"
-                
-                async with session.get(api_url) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        output += "\n--- ROOT DIRECTORY ---"
-                        for item in data:
-                            output += f"\n- {item['name']} ({item['type']})"
-                            if item['type'] == 'dir' and item['name'].lower() in ['skills', 'tools', 'scripts', 'src']:
-                                async with session.get(item['url']) as sub_resp:
-                                    if sub_resp.status == 200:
-                                        output += f"\n  --- CONTENTS OF {item['name']} ---"
-                                        for sub_item in await sub_resp.json():
-                                            output += f"\n  - {sub_item['name']}"
+                        tree_data = await resp.json()
+                        all_items = tree_data.get('tree', [])
+                        
+                        # Filter to target subdirectory
+                        if subpath:
+                            relevant = [i for i in all_items if i['path'].startswith(subpath)]
+                        else:
+                            relevant = all_items
+                        
+                        # === Build skill-grouped compact structure ===
+                        from collections import defaultdict
+                        skills = defaultdict(list)
+                        prefix = subpath + "/" if subpath else ""
+                        
+                        for item in relevant:
+                            rel_path = item['path'][len(prefix):] if prefix else item['path']
+                            parts = rel_path.split('/')
+                            if len(parts) >= 1 and parts[0]:
+                                skill_name = parts[0]
+                                file_path = '/'.join(parts[1:]) if len(parts) > 1 else ""
+                                item_type = "📁" if item['type'] == 'tree' else "📄"
+                                if file_path:
+                                    skills[skill_name].append(f"  {item_type} {file_path}")
+                        
+                        # Build compact output: one block per skill
+                        output += f"\n=== SKILL DIRECTORY MAP ({len(skills)} skills) ===\n"
+                        for skill_name in sorted(skills.keys()):
+                            files = skills[skill_name]
+                            output += f"\n### SKILL: {skill_name}\n"
+                            for f in files:
+                                output += f"{f}\n"
+                        
+                        # === Download SKILL.md files for descriptions ===
+                        skill_mds = [i for i in relevant if i['type'] == 'blob' and 
+                                     i['path'].split('/')[-1].upper() in ['SKILL.MD', 'INDEX.MD']]
+                        skill_mds = skill_mds[:40]
+                        
+                        output += f"\n\n=== SKILL DESCRIPTIONS ({len(skill_mds)} files) ===\n"
+                        
+                        async def download_desc(item):
+                            raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{item['path']}"
+                            async with session.get(raw_url) as raw_resp:
+                                if raw_resp.status == 200:
+                                    text = await raw_resp.text()
+                                    return f"\n--- {item['path']} ---\n{text[:1500]}\n"
+                                return ""
+                        
+                        results = await asyncio.gather(*[download_desc(f) for f in skill_mds])
+                        output += "".join(results)
+                    else:
+                        output += f"\nFailed to fetch repository tree. Status: {resp.status}"
         except Exception as e:
             output += f"\nError fetching GitHub data: {e}"
         return output
@@ -80,6 +119,43 @@ async def fetch_url_content(url):
                     return f"Failed to fetch {url}. Status code: {resp.status}"
     except Exception as e:
         return f"Error fetching {url}: {e}"
+
+async def refine_user_prompt(api_key, user_input):
+    """Uses Llama-3.1-8B-Free to professionalize the user prompt into a structured security mission."""
+    refiner_model = "meta-llama/llama-3.1-8b-instruct:free"
+    system_prompt = """You are the RedX Security Secretary. 
+Your task is to rewrite the user's messy or short prompt into a professional, structured security mission statement.
+RULES:
+1. Preserve the user's core intent (URLs, specific targets, or questions).
+2. Use technical, formal language.
+3. Keep it to one or two sentences.
+4. Output ONLY the refined prompt text. No chatter.
+
+Example Input: "hack this site https://test.com"
+Example Output: "Perform a technical security assessment of the web application at https://test.com, identifying potential attack surfaces and misconfigurations."
+"""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "X-Title": "RedX Refiner"
+    }
+    body = {
+        "model": refiner_model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Professionalize this: {user_input}"}
+        ],
+        "temperature": 0.1
+    }
+    
+    try:
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=SSL_CTX)) as session:
+            async with session.post(f"{OPENROUTER}/chat/completions", headers=headers, json=body) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data['choices'][0]['message']['content'].strip()
+    except: pass
+    return user_input # Fallback to original if refinement fails
 
 async def distill_knowledge(api_key, model, query, raw_results):
     """
@@ -161,7 +237,8 @@ def proxy(endpoint):
     referer = request.headers.get("HTTP-Referer", "http://localhost:8080")
     title   = request.headers.get("X-Title", "RedX Chatbot")
     strict_mode = request.headers.get("X-Strict-Mode") == "true"
-    print(f"[DEBUG] Request for {endpoint} | Strict Mode: {strict_mode}")
+    refiner_active = request.headers.get("X-Prompt-Refiner") == "true"
+    print(f"[DEBUG] Request for {endpoint} | Strict: {strict_mode} | Refiner: {refiner_active}")
     body    = request.get_json(silent=True) or {}
     url     = f"{OPENROUTER}/{endpoint}"
     stream  = body.get("stream", False)
@@ -183,6 +260,14 @@ def proxy(endpoint):
             if stream:
                 def generate_fast_stream():
                     async def _run():
+                        # 0. Prompt Refinement (The Secretary)
+                        if refiner_active:
+                            yield f"data: {json.dumps({'status': '🪄 Refining security mission...'})}\n\n".encode()
+                            refined_prompt = await refine_user_prompt(api_key, user_input)
+                            yield f"data: {json.dumps({'refined_prompt': refined_prompt})}\n\n".encode()
+                        else:
+                            refined_prompt = user_input
+
                         # 1. Local Knowledge Retrieval (Secondary Brain)
                         yield f"data: {json.dumps({'status': '🧠 Retrieving local memory...'})}\n\n".encode()
                         local_context = engine.search_knowledge(user_input, n_results=3)
@@ -193,8 +278,18 @@ def proxy(endpoint):
                         import re
                         url_match = re.search(r"https?://[^\s]+", user_input)
                         
+                        # URL Memory: If no URL in current message, scan chat history for GitHub URLs
+                        if not url_match:
+                            for m in reversed(messages):
+                                if m.get("role") == "user":
+                                    history_url = re.search(r"https?://github\.com/[^\s.,;!?]+", m.get("content", ""))
+                                    if history_url:
+                                        url_match = history_url
+                                        print(f"[URL-MEMORY] Recalled GitHub URL from chat history: {url_match.group(0)}")
+                                        break
+                        
                         if url_match:
-                            target_url = url_match.group(0)
+                            target_url = url_match.group(0).rstrip('.,;!?')
                             yield f"data: {json.dumps({'status': f'📡 Accessing Original Source: {target_url[:40]}...'})}\n\n".encode()
                             try:
                                 search_results = await fetch_url_content(target_url)
@@ -242,36 +337,57 @@ def proxy(endpoint):
                         aug_msgs = []
                         has_sys = False
                         
-                        # Scrutiny Engine System Instruction
-                        scrutiny_instr = f"""
+                        if strict_mode:
+                            system_injection = f"""
 ### SCRUTINY ENGINE ACTIVE ###
 You are now in **Strict Verification Mode**. 
 The following block contains ORIGINAL DATA retrieved from live 2026 sources and local memory.
-1. Use the data below as your ONLY source for technical specifications (CVEs, tool features, skill lists).
+1. Use the data below OR the verified context from previous messages as your ONLY source for technical specifications (CVEs, tool features, skill lists).
 2. If the data below contradicts your internal training data, the data below is the ABSOLUTE TRUTH.
-3. If you cannot find a specific answer in the block below, say "I cannot verify this detail from the provided sources" instead of guessing.
+3. If you cannot find a specific answer in the block below OR in the established conversation history, say "I cannot verify this detail from the provided sources" instead of guessing.
 4. Cite sources as [LOCAL] or [LIVE] where appropriate.
+5. The COMPLETE DIRECTORY TREE section shows EVERY file and subfolder that exists. Use it to accurately list all subfolders and files.
+6. The KEY FILE CONTENTS section contains the actual descriptions from SKILL.md and INDEX.md files. Use them for explanations.
+7. Format your response cleanly using markdown tables or numbered lists. Do NOT repeat information.
 
 --- ORIGINAL VERIFIED DATA ---
 {search_context}
 ------------------------------
 """
+                        else:
+                            system_injection = f"""
+### STANDARD REASONING ACTIVE ###
+You are operating in standard mode. Below is contextual data retrieved from live sources and memory.
+Feel free to use your internal training data, logical inference, and general knowledge alongside the provided context to fully answer the user's question.
+IMPORTANT: The COMPLETE DIRECTORY TREE section shows EVERY file and subfolder. Use it to accurately list all subfolders and files.
+The KEY FILE CONTENTS section has the actual descriptions. Use them for explanations.
+Format your response cleanly using markdown tables or numbered lists. Do NOT repeat information. Present all data in ONE pass.
+
+--- VERIFIED DATA CONTEXT ---
+{search_context}
+-----------------------------
+"""
 
                         for m in messages:
                             mc = m.copy()
                             if mc.get("role") == "system":
-                                mc["content"] += "\n\n" + scrutiny_instr
+                                mc["content"] += "\n\n" + system_injection
                                 has_sys = True
+                            # Inject the refined prompt into the final payload
+                            if mc.get("role") == "user" and mc.get("content") == user_input:
+                                mc["content"] = refined_prompt
                             aug_msgs.append(mc)
                         if not has_sys:
-                            aug_msgs.insert(0, {"role": "system", "content": scrutiny_instr})
+                            aug_msgs.insert(0, {"role": "system", "content": system_injection})
                         
                         # Final Scrutiny Anchor (at the very end of context)
                         if strict_mode:
-                            aug_msgs.append({"role": "system", "content": "FINAL WARNING: You are in STRICT MODE. If the information is not in the --- ORIGINAL VERIFIED DATA --- block, you MUST say 'Information not found'. Do NOT guess."})
+                            aug_msgs.append({"role": "system", "content": "FINAL WARNING: You are in STRICT MODE. If the information is not in the --- ORIGINAL VERIFIED DATA --- block OR your verified chat history, you MUST say 'Information not found'. Do NOT guess."})
                         
                         body["messages"] = aug_msgs
                         body["temperature"] = 0.0 if strict_mode else 0.1
+                        if "max_tokens" not in body:
+                            body["max_tokens"] = 16384
                         fwd_headers = {
                             "Authorization": auth,
                             "Content-Type":  "application/json",

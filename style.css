@@ -907,3 +907,61 @@ input:checked + .slider:before {
   color: #00ff80;
   border: 1px solid rgba(0, 255, 128, 0.2);
 }
+
+/* ─── Refined Mission ───────────────────────────────────────── */
+.refined-mission {
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: rgba(124, 109, 250, 0.05);
+  border: 1px solid rgba(124, 109, 250, 0.2);
+  border-radius: var(--radius-sm);
+  animation: slide-in 0.3s ease-out;
+}
+.mission-header {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 6px;
+  font-size: 0.75rem; font-weight: 700; color: var(--accent2);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.mission-text {
+  font-size: 0.88rem; font-style: italic; color: var(--text2);
+  line-height: 1.5;
+}
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Mermaid Diagrams ─────────────────────────────────────── */
+.mermaid {
+  background: rgba(0,0,0,0.2) !important;
+  padding: 20px;
+  border-radius: var(--radius-sm);
+  margin: 15px 0;
+  display: flex; justify-content: center;
+  border: 1px solid var(--border);
+}
+.mermaid svg {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+/* ─── Alerts & Blockquotes ──────────────────────────────────── */
+blockquote {
+  margin: 15px 0;
+  padding: 14px 18px;
+  border-left: 4px solid var(--accent);
+  background: rgba(124, 109, 250, 0.05);
+  border-radius: 0 8px 8px 0;
+  color: var(--text2);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+blockquote strong {
+  color: var(--accent2);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: block;
+  margin-bottom: 4px;
+}
