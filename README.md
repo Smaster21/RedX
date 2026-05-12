@@ -1,4 +1,8 @@
-# 🔴 RedX v4.2 — Autonomous Operational Intelligence Agent
+<div align="center">
+  <img src="assets/redx-logo.png" alt="RedX Logo" width="250"/>
+</div>
+
+# RedX v4.2 — Autonomous Operational Intelligence Agent
 
 **RedX** is a security-focused AI orchestration platform built for red team operators, penetration testers, and security researchers. It combines persistent local memory, real-time web intelligence, and frontier AI reasoning into a single autonomous system that **learns, verifies, and never forgets**.
 
