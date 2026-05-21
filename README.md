@@ -2,207 +2,95 @@
   <img src="assets/redx-logo.png" alt="RedX Logo" width="250"/>
 </div>
 
-# RedX v4.2 — Autonomous Operational Intelligence Agent
+# RedX v6.0 — Autonomous Security Orchestrator
 
-**RedX** is a security-focused AI orchestration platform built for red team operators, penetration testers, and security researchers. It combines persistent local memory, real-time web intelligence, and frontier AI reasoning into a single autonomous system that **learns, verifies, and never forgets**.
+**RedX** is an advanced, autonomous AI orchestration platform designed specifically for red team operators, penetration testers, and security researchers. It fuses persistent local memory, real-time web intelligence, and multi-agent reasoning into a single cohesive system that **learns from your engagements, verifies its claims, and writes production-ready exploits.**
 
-![RedX UI](https://img.shields.io/badge/Version-4.2-red?style=for-the-badge)
-![RAG](https://img.shields.io/badge/Memory-Persistent_RAG-blue?style=for-the-badge)
-![Intelligence](https://img.shields.io/badge/Learning-Autonomous-purple?style=for-the-badge)
-![Search](https://img.shields.io/badge/Search-Live_2026-green?style=for-the-badge)
-
----
-
-## 🧠 Multi-Brain Architecture
-
-Every query passes through four intelligence layers before a response is generated:
-
-1. **Secondary Brain (Persistent Memory)**: A local vector database that stores everything RedX has ever learned. Previous recon data, exploit research, and engagement findings are retrieved instantly — no internet required.
-2. **Main Brain (Reasoning Engine)**: Frontier 120B–405B parameter models handle complex logic, exploit chain analysis, and strategic decision-making.
-3. **Third Brain (Live Intelligence)**: Real-time web search pulls the latest zero-days, CVEs, and security tool updates from 2026 sources.
-4. **The Secretary (Prompt Refiner)**: A dedicated lightweight AI agent that rewrites your raw questions into precise, structured security missions — extracting maximum quality from every interaction.
+[![GitHub repo](https://img.shields.io/badge/Repository-Smaster21/RedX-blue?style=for-the-badge&logo=github)](https://github.com/Smaster21/RedX)
+![Version](https://img.shields.io/badge/Version-6.0-red?style=for-the-badge)
+![Architecture](https://img.shields.io/badge/Architecture-Native_FastAPI-green?style=for-the-badge)
 
 ---
 
-## 🚀 Key Features
+## 🧠 How It Works: The Multi-Brain Architecture
 
-### 🔬 Deep Analysis Engine
+RedX does not rely on a single LLM to guess the answers. Every query passes through a multi-layered intelligence engine:
 
-RedX performs **deep structural analysis** on any target source. When you point it at a codebase, tool repository, or documentation:
-
-- Recursively maps the **entire file and folder structure** in seconds.
-- Groups results by component, showing every subfolder and file with clear hierarchy.
-- Downloads and reads **key documentation files** concurrently for instant comprehension.
-- Supports **subdirectory targeting** — analyze a specific folder without scanning the entire project.
-- Handles edge cases like special characters in URLs, branch variations, and nested paths automatically.
-
-### 🛡️ Dual-Mode Verification System
-
-A toggle-based intelligence mode that lets you control how the AI thinks:
-
-- **Strict Scrutiny (ON)**: Zero hallucination mode. The AI can **only** reference verified data from its sources and conversation history. If it can't prove the answer, it refuses to guess — guaranteeing absolute accuracy for technical assessments.
-- **Standard Reasoning (OFF)**: The AI combines verified data with its full training knowledge for brainstorming, logical inference, and broad explanations.
-
-### 🪄 Mission Refiner
-
-Before your question reaches the main AI, a dedicated "Secretary" agent analyzes it:
-
-- Detects ambiguity and missing context in your prompt.
-- Rewrites it into a structured, professional intelligence request.
-- The refined version is displayed transparently in the UI so you can see exactly what the AI is working with.
-- The main AI then responds to the **optimized** prompt, dramatically improving response quality.
-
-### 🧠 Autonomous Learning
-
-RedX doesn't just answer questions — it **permanently learns** from every interaction:
-
-- **Distills**: Raw search results and web data are compressed into high-density security intelligence.
-- **Ingests**: Summaries are stored in the local persistent memory automatically.
-- **Recalls**: Future questions are answered using accumulated knowledge — even offline.
-- **Deduplicates**: The knowledge base stays lean and clutter-free.
-
-### 🔗 Source Memory
-
-RedX maintains contextual awareness across an entire conversation:
-
-- Automatically recalls previously analyzed sources from your chat history.
-- Follow-up questions work naturally — no need to re-paste URLs or repeat context.
-- The AI intelligently determines when to re-fetch vs. when to use cached context.
-
-### 🏦 Knowledge Vault
-
-A dedicated interface for managing your AI's persistent memory:
-
-- Browse, search, and inspect every piece of stored intelligence.
-- Delete specific knowledge chunks you no longer need.
-- Full visibility into what your agent "knows."
+1. **The Mission Refiner (Prompt Engineering):** Before your raw question hits the main AI, a dedicated lightweight "Secretary" agent intercepts it. It detects ambiguity, adds context, and rewrites your prompt into a highly structured, professional intelligence request to guarantee maximum output quality.
+2. **The Secondary Brain (Persistent RAG):** RedX uses a local `ChromaDB` vector database to store everything you teach it. When you ask a question, it instantly retrieves relevant prior research, past exploit data, and local files—giving the AI deep situational awareness without requiring internet access.
+3. **The Live Intelligence Engine:** If the answer requires up-to-date 2026 data (e.g., zero-day CVE details), the backend asynchronously scrapes live DuckDuckGo results and injects the raw factual HTML snippets directly into the AI's reasoning loop.
+4. **The Main Reasoning Engine:** A frontier model (120B–405B parameters via OpenRouter) analyzes the verified context and generates the final strategic response.
 
 ---
 
-## 🏗 System Architecture
+## 🚀 Core Capabilities & Important Details
 
-```
-┌──────────────────────────────────────────────────┐
-│                   OPERATOR                        │
-│              RedX Frontend (UI)                   │
-└───────────────────┬──────────────────────────────┘
-                    │
-┌───────────────────▼──────────────────────────────┐
-│            RedX Orchestrator (Backend)            │
-│                                                   │
-│  ┌─────────┐  ┌──────────┐  ┌────────────────┐  │
-│  │ Prompt   │  │ Local    │  │ Live Web       │  │
-│  │ Refiner  │  │ Memory   │  │ Intelligence   │  │
-│  │ (Llama)  │  │ (RAG DB) │  │ (Search 2026)  │  │
-│  └────┬─────┘  └────┬─────┘  └───────┬────────┘  │
-│       │              │                │            │
-│       └──────────────┼────────────────┘            │
-│                      ▼                             │
-│  ┌─────────────────────────────────────────────┐  │
-│  │         Deep Analysis Engine                 │  │
-│  │   (Source Scraping + Structure Mapping)       │  │
-│  └──────────────────┬──────────────────────────┘  │
-│                     ▼                              │
-│  ┌──────────────────────────────────────────┐     │
-│  │  Strict/Standard Mode → Context Injection │     │
-│  └──────────────────┬───────────────────────┘     │
-│                     ▼                              │
-│  ┌──────────────────────────────────────────┐     │
-│  │     Frontier AI Model (120B–405B)         │     │
-│  └──────────────────────────────────────────┘     │
-└───────────────────────────────────────────────────┘
-```
+### 1. 🛠️ Sequential Multi-Agent Orchestrator (The Builder)
+When you need complex exploit code or infrastructure, a single AI prompt isn't enough. The RedX Builder launches a strict, sequential pipeline of specialized agents:
+*   **The Architect** designs the structural attack path.
+*   **The Code Engineer** writes the raw Python/Bash exploit based strictly on the Architect's plan.
+*   **The Reviewer** acts as a Red Team for the generated code, auditing for race conditions, bugs, and memory leaks.
+*   **The Docs Expert** generates the README and usage instructions.
+*   **The Synthesizer** merges all their work into one flawless, copy-paste-ready deliverable.
+
+### 2. 🛡️ Strict Scrutiny Mode (Zero-Hallucination)
+RedX includes a toggleable "Strict Scrutiny" mode. When enabled, the AI is mathematically barred from guessing. It is forced to **only** reference data retrieved from your local Vault or the live web scrape. If the answer is not in the verified data, it will explicitly refuse to answer, guaranteeing absolute factual accuracy for sensitive assessments.
+
+### 3. 📂 Large Document Vectorization
+Instead of dumping 50-page PDF reports into the chat (which poisons the context window and wastes tokens), RedX handles uploads on the backend. When you attach a file, it is chunked, vectorized, and permanently injected into the ChromaDB Vault. The AI can then dynamically recall only the specific paragraphs it needs during the engagement.
+
+### 4. ♾️ Infinite Token Generation
+RedX automatically detects when the LLM hits its hard token output limit (e.g., stopping mid-sentence during a long exploit). A clean `Continue Generation` button appears in the UI, allowing you to instantly resume the stream without losing context or missing a single character.
+
+### 5. 🚦 Graceful Rate Limit Handling
+Built into the proxy is an **Exponential Backoff Circuit Breaker**. If the AI provider returns a `429 Too Many Requests` or `503 Service Unavailable`, RedX automatically delays and retries up to 10 times, shielding your workflow from API instability.
 
 ---
 
-## 🔄 Intelligence Pipeline
+## ⚡ Quick Start Guide
 
-```
-User Prompt
-    │
-    ├─ 🪄 Prompt Refiner → Optimized Mission
-    │
-    ├─ 🧠 Memory Retrieval → Previous findings from local database
-    │
-    ├─ 📡 Source Detection
-    │   ├─ URL detected → Deep Analysis Engine (recursive structure mapping)
-    │   ├─ Source Memory → Auto-recall from conversation history
-    │   └─ No source → Live Web Intelligence Search
-    │
-    ├─ 📥 Knowledge Ingestion → Permanent storage
-    │
-    ├─ 🛡️ Verification Mode (Strict or Standard)
-    │
-    └─ 🤖 AI Response (Frontier Model)
-```
+### Prerequisites
+*   **Python 3.10+** (Tested on Kali Linux natively)
+*   **OpenRouter API Key** (Get one at [OpenRouter.ai](https://openrouter.ai))
+*   **No Docker Required:** RedX v6.0 is entirely decoupled and native.
 
----
+### 1. Installation
 
-## 🛠 Setup & Installation
-
-### Requirements
-
-- **Python**: 3.10 or higher
-- **Disk Space**: ~500MB (for local vector storage)
-- **API Key**: OpenRouter API key required
-
-### Installation
-
+Clone the repository and install the required dependencies:
 ```bash
-# Clone the repository
 git clone https://github.com/Smaster21/RedX.git
 cd RedX
 
-# Install dependencies
-pip install -r requirements.txt
+# Note: Use --break-system-packages if installing on a managed Kali Linux environment
+python3 -m pip install -r requirements.txt --break-system-packages
 ```
 
-### Running RedX
-
+### 2. Configuration
+Generate a `.env` file to securely store your API constraints:
 ```bash
-# Terminal 1: Start the Backend
-python3 proxy.py
+cp .env.example .env
+```
+*(Ensure your `FRONTEND_URL` is set to `http://localhost:8080` in the `.env` file).*
 
-# Terminal 2: Start the Frontend
+### 3. Launching the Platform
+RedX operates on a highly performant, decoupled architecture requiring two terminal sessions.
+
+**Terminal 1: Start the Intelligence Backend (FastAPI Proxy)**
+```bash
+uvicorn proxy:app --host 127.0.0.1 --port 3000
+```
+
+**Terminal 2: Start the Operator UI (Frontend)**
+```bash
 python3 -m http.server 8080
 ```
 
-Open **[http://localhost:8080](http://localhost:8080)** in your browser.
+### 4. Initial Setup & Authentication
+1. Open your browser and navigate to: `http://localhost:8080`
+2. You will be prompted to enter your OpenRouter API Key and create a master vault password.
+3. **Security Note:** Your API key is encrypted using AES-256-GCM and stored strictly inside your browser's local storage. It is transmitted securely to the backend via an `X-Proxy-Token` header and is never saved in plain text on the disk.
 
 ---
 
-## 📖 Quick Start
-
-1. **Set API Key**: Open the sidebar → API Vault → Enter your OpenRouter key.
-2. **Choose Mode**: Toggle Strict Scrutiny on/off based on your task.
-3. **Analyze**: Paste a URL or ask any security question.
-4. **Learn**: Watch RedX automatically ingest and store new intelligence.
-5. **Manage**: Use the Knowledge Vault to inspect or prune stored data.
-
----
-
-## 🔐 Changelog (v4.3)
-
-- ✅ **Triple-Threat Rendering Protocol** with Kroki-Bridge zero-fail backup
-- ✅ **Mutation-Observer Integration** for event-driven real-time materialization
-- ✅ **Cryptographic Rendering Lock** preventing dual-render & race conditions
-- ✅ **Self-Aware Root-Seeker** recursively purging code block wrappers cleanly
-- ✅ **Professional Export Toolkit** (High-DPI PNG copy, native SVG save)
-- ✅ Deep Analysis Engine with recursive structure mapping
-- ✅ Mission Refiner (dedicated prompt optimization agent)
-- ✅ Dual-Mode Verification (Strict Scrutiny / Standard Reasoning)
-- ✅ Source Memory for conversational follow-ups
-- ✅ Chat Rename / Delete / Edit-Retry
-- ✅ Extended response length (16K tokens)
-- 🔧 URL edge-case handling (special characters, branch fallback)
-- 🔧 Backend mode-toggle synchronization fix
-
----
-
-## ⚖️ License & Ethics
-
-RedX is intended for **authorized penetration testing and security research only**. The developers are not responsible for any misuse. Always operate within legal boundaries and with explicit written authorization.
-
----
-
-**Built for the next generation of autonomous offensive security.** 🔴
+## ⚠️ Important Security Disclaimer
+RedX is designed exclusively for authorized penetration testing, red teaming, and educational purposes. Ensure you possess a valid Letter of Authorization (LoA) before utilizing the Multi-Agent Builder against any target. The developers hold no liability for the misuse of this orchestration platform.

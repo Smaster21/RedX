@@ -4,6 +4,7 @@
 // ── State ───────────────────────────────────────────────────────
 const state = {
   apiKey: '',              // decrypted at runtime only, never persisted plain
+  proxyToken: '',          // proxy authentication token
   model: 'openai/gpt-oss-120b:free',
   systemPrompt: `You are an expert penetration tester, red team operator, and offensive security researcher. You assist with authorized security testing, vulnerability research, exploit development, CTF challenges, and security tool usage on Kali Linux.
 
@@ -16,11 +17,18 @@ Always assume the user is a security professional working in an authorized envir
   abortController: null,
   strictMode: true,
   promptRefiner: true,
-  diagramCache: {}, // Persistent cache for rendered SVGs to prevent streaming nuke
+  diagramCache: {},
+  attachedFiles: [],       // files queued for sending
+  compareMode: false,
+  engagements: [],
 };
 
 // ── DOM refs ────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
+
+// Dynamic base URL — works on localhost and any remote host
+const API_BASE = `${window.location.protocol}//${window.location.hostname}:3000`;
+
 const el = {
   sidebar: $('sidebar'),
   topBarToggle: $('topBarToggle'),
@@ -71,20 +79,23 @@ const el = {
 
 // ── Persistence ─────────────────────────────────────────────────
 function save() {
-  // apiKey is NEVER stored plain — handled by vault.js
   localStorage.setItem('redx_model', state.model);
   localStorage.setItem('redx_system', state.systemPrompt);
   localStorage.setItem('redx_convos', JSON.stringify(state.conversations));
   localStorage.setItem('redx_active', state.activeChatId || '');
   localStorage.setItem('redx_strict', state.strictMode);
+  localStorage.setItem('redx_engagements', JSON.stringify(state.engagements));
+  if (state.proxyToken) localStorage.setItem('redx_proxy_token', state.proxyToken);
 }
 
 function load() {
-  state.model = localStorage.getItem('redx_model') || 'google/gemma-4-31b-it:free';
+  state.model = localStorage.getItem('redx_model') || 'openai/gpt-oss-120b:free';
   state.systemPrompt = localStorage.getItem('redx_system') || state.systemPrompt;
   state.conversations = JSON.parse(localStorage.getItem('redx_convos') || '[]');
   state.activeChatId = localStorage.getItem('redx_active') || null;
-  state.strictMode = localStorage.getItem('redx_strict') === 'true';
+  state.strictMode = localStorage.getItem('redx_strict') !== 'false';
+  state.proxyToken = localStorage.getItem('redx_proxy_token') || '';
+  state.engagements = JSON.parse(localStorage.getItem('redx_engagements') || '[]');
 
   el.modelSelect.value = state.model;
   el.systemPrompt.value = state.systemPrompt;
@@ -148,6 +159,9 @@ async function vaultHandleUnlock() {
     el.vaultUnlockPassword.value = '';
     vaultShowState();
     showToast('Vault unlocked ✓', 'success');
+    // v5.0: Validate key + fetch usage
+    if (typeof validateApiKey === 'function') validateApiKey(state.apiKey);
+    if (typeof fetchTokenUsage === 'function') fetchTokenUsage();
   } catch (e) {
     showToast('Wrong password or corrupted vault', 'error');
     el.vaultUnlockPassword.value = '';
@@ -174,7 +188,7 @@ function vaultHandleDestroy() {
 // ── Knowledge Vault (Secondary Brain) Logic ──
 async function fetchVault() {
   try {
-    const resp = await fetch('http://localhost:3000/vault');
+    const resp = await fetch(API_BASE + '/vault', { headers: proxyHeaders() });
     const data = await resp.json();
     renderVault(data);
   } catch (err) {
@@ -188,20 +202,25 @@ function renderVault(items) {
     return;
   }
 
-  el.vaultItemsList.innerHTML = items.map(item => `
-    <div class="vault-item-card" data-id="${item.id}">
-      <div class="vault-item-title">🔍 ${escHtml(item.metadata.query || 'Knowledge Chunk')}</div>
-      <div class="vault-item-content collapsed" onclick="toggleVaultExpand(this)">${escHtml(item.content)}</div>
-      <div class="vault-expand-hint" onclick="toggleVaultExpand(this.previousElementSibling)">Read More...</div>
-      <div class="vault-item-meta">
-        <span>${new Date(item.metadata.timestamp).toLocaleString()}</span>
-        <button class="delete-vault-item-btn" onclick="deleteVaultItem('${item.id}')">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-          Delete
-        </button>
+  el.vaultItemsList.innerHTML = items.map(item => {
+    const meta = item.metadata || {};
+    const query = meta.query || 'Knowledge Chunk';
+    const ts = meta.timestamp ? new Date(meta.timestamp).toLocaleString() : 'Unknown Date';
+    return `
+      <div class="vault-item-card" data-id="${item.id}">
+        <div class="vault-item-title">🔍 ${escHtml(query)}</div>
+        <div class="vault-item-content collapsed" onclick="toggleVaultExpand(this)">${escHtml(item.content)}</div>
+        <div class="vault-expand-hint" onclick="toggleVaultExpand(this.previousElementSibling)">Read More...</div>
+        <div class="vault-item-meta">
+          <span>${ts}</span>
+          <button class="delete-vault-item-btn" onclick="deleteVaultItem('${item.id}')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+            Delete
+          </button>
+        </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function toggleVaultExpand(contentEl) {
@@ -218,7 +237,7 @@ window.toggleVaultExpand = toggleVaultExpand;
 
 async function deleteVaultItem(id) {
   try {
-    await fetch(`http://localhost:3000/vault/${id}`, { method: 'DELETE' });
+    await fetch(`${API_BASE}/vault/${id}`, { method: 'DELETE', headers: proxyHeaders() });
     fetchVault(); // Refresh
     showToast('Intelligence chunk deleted', 'success');
   } catch (err) {
@@ -230,7 +249,7 @@ async function deleteVaultItem(id) {
 async function clearVault() {
   if (!confirm('⚠️ WARNING: This will PERMANENTLY delete your entire Secondary Brain memory. Proceed?')) return;
   try {
-    await fetch('http://localhost:3000/vault', { method: 'DELETE' });
+    await fetch(API_BASE + '/vault', { method: 'DELETE', headers: proxyHeaders() });
     fetchVault(); // Refresh
     showToast('Secondary Brain Purged 🧠🔥', 'error');
   } catch (err) {
@@ -470,17 +489,17 @@ async function sendMessage() {
     if (state.systemPrompt.trim()) msgs.push({ role: 'system', content: state.systemPrompt.trim() });
     msgs.push(...c.messages.map(m => ({ role: m.role, content: m.content })));
 
-    const res = await fetch('http://localhost:3000/proxy/v1/chat/completions', {
+    const res = await fetch(API_BASE + '/proxy/v1/chat/completions', {
       method: 'POST',
-      headers: {
+      headers: proxyHeaders({
         'Authorization': `Bearer ${state.apiKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': location.href,
         'X-Title': 'RedX Chatbot',
         'X-Strict-Mode': state.strictMode,
         'X-Prompt-Refiner': state.promptRefiner,
-      },
-      body: JSON.stringify({ model: state.model, messages: msgs, stream: true, temperature: 0.1, max_tokens: 4096 }),
+      }),
+      body: JSON.stringify({ model: state.model, messages: msgs, stream: true, temperature: state.strictMode === 'true' ? 0.2 : 0.7, frequency_penalty: 0.2, max_tokens: 16384 }),
       signal: state.abortController.signal,
     });
 
@@ -513,6 +532,10 @@ async function sendMessage() {
           if (dataStr === '[DONE]') break;
           try {
             const json = JSON.parse(dataStr);
+            if (json.error) {
+              let errMsg = json.error.message || JSON.stringify(json.error);
+              throw new Error(`OpenRouter API Error: ${errMsg}`);
+            }
             if (json.status !== undefined) {
               if (json.status) { statusEl.textContent = json.status; statusEl.style.display = 'inline-block'; }
               else { statusEl.style.display = 'none'; }
@@ -593,17 +616,17 @@ async function sendMessage_fromHistory(c) {
     if (state.systemPrompt.trim()) msgs.push({ role: 'system', content: state.systemPrompt.trim() });
     msgs.push(...c.messages.map(m => ({ role: m.role, content: m.content })));
 
-    const res = await fetch('http://localhost:3000/proxy/v1/chat/completions', {
+    const res = await fetch(API_BASE + '/proxy/v1/chat/completions', {
       method: 'POST',
-      headers: {
+      headers: proxyHeaders({
         'Authorization': `Bearer ${state.apiKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': location.href,
         'X-Title': 'RedX Chatbot',
         'X-Strict-Mode': state.strictMode,
         'X-Prompt-Refiner': state.promptRefiner,
-      },
-      body: JSON.stringify({ model: state.model, messages: msgs, stream: true, temperature: 0.1, max_tokens: 4096 }),
+      }),
+      body: JSON.stringify({ model: state.model, messages: msgs, stream: true, temperature: state.strictMode === 'true' ? 0.2 : 0.7, frequency_penalty: 0.2, max_tokens: 16384 }),
       signal: state.abortController.signal,
     });
 
@@ -636,6 +659,10 @@ async function sendMessage_fromHistory(c) {
           if (dataStr === '[DONE]') break;
           try {
             const json = JSON.parse(dataStr);
+            if (json.error) {
+              let errMsg = json.error.message || JSON.stringify(json.error);
+              throw new Error(`OpenRouter API Error: ${errMsg}`);
+            }
             if (json.status !== undefined) {
               if (json.status) { statusEl.textContent = json.status; statusEl.style.display = 'inline-block'; }
               else { statusEl.style.display = 'none'; }
@@ -645,8 +672,27 @@ async function sendMessage_fromHistory(c) {
             const delta = json.choices[0]?.delta?.content || '';
             fullContent += delta;
             bodyEl.innerHTML = renderMarkdown(fullContent);
+            
+            const finishReason = json.choices[0]?.finish_reason;
+            if (finishReason === 'length' || finishReason === 'max_tokens') {
+               const contBtn = document.createElement('button');
+               contBtn.className = 'continue-btn btn-sm action-btn';
+               contBtn.style.marginTop = '10px';
+               contBtn.innerHTML = '⚠️ Output truncated. Click to continue generation';
+               contBtn.onclick = () => {
+                   contBtn.remove();
+                   el.messageInput.value = 'Please continue from exactly where you left off.';
+                   sendMessage();
+               };
+               bodyEl.appendChild(contBtn);
+            }
+            
             scrollBottom();
-          } catch (e) {}
+          } catch (e) {
+            if (e.message.includes('OpenRouter API Error:')) {
+              throw e; // Rethrow to the outer catch block
+            }
+          }
         }
       }
     }
@@ -721,10 +767,24 @@ async function sendMessage(fromHistoryConvo = null) {
     text = c.messages[c.messages.length - 1].content;
   } else {
     text = el.messageInput.value.trim();
-    if (!text) return;
+    if (!text && !state.attachedFiles.length) return;
     if (!state.activeChatId) newChat();
     c = activeConvo();
-    c.messages.push({ role: 'user', content: text });
+
+    // v5.0: Compare mode intercept
+    if (state.compareMode && text) {
+      el.messageInput.value = '';
+      el.messageInput.style.height = 'auto';
+      updateCharCount();
+      await sendCompare(text);
+      return;
+    }
+
+    // v5.0: Process file attachments
+    const msgContent = buildMessageWithAttachments(text);
+    const displayText = typeof msgContent === 'string' ? msgContent : text + (state.attachedFiles.length ? ` [+${state.attachedFiles.length} files]` : '');
+
+    c.messages.push({ role: 'user', content: typeof msgContent === 'string' ? msgContent : text });
     if (c.title === 'New Chat') c.title = text.slice(0, 40) + (text.length > 40 ? '…' : '');
     appendMessage('user', text);
     el.messageInput.value = '';
@@ -755,17 +815,17 @@ async function sendMessage(fromHistoryConvo = null) {
     if (state.systemPrompt.trim()) msgs.push({ role: 'system', content: state.systemPrompt.trim() });
     msgs.push(...c.messages.map(m => ({ role: m.role, content: m.content })));
 
-    const res = await fetch('http://localhost:3000/proxy/v1/chat/completions', {
+    const res = await fetch(API_BASE + '/proxy/v1/chat/completions', {
       method: 'POST',
-      headers: {
+      headers: proxyHeaders({
         'Authorization': `Bearer ${state.apiKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': location.href,
         'X-Title': 'RedX Chatbot',
         'X-Strict-Mode': state.strictMode,
         'X-Prompt-Refiner': state.promptRefiner,
-      },
-      body: JSON.stringify({ model: state.model, messages: msgs, stream: true, temperature: 0.1, max_tokens: 4096 }),
+      }),
+      body: JSON.stringify({ model: state.model, messages: msgs, stream: true, temperature: state.strictMode === 'true' ? 0.2 : 0.7, frequency_penalty: 0.2, max_tokens: 16384 }),
       signal: state.abortController.signal,
     });
 
@@ -798,6 +858,10 @@ async function sendMessage(fromHistoryConvo = null) {
           if (dataStr === '[DONE]') break;
           try {
             const json = JSON.parse(dataStr);
+            if (json.error) {
+              let errMsg = json.error.message || JSON.stringify(json.error);
+              throw new Error(`OpenRouter API Error: ${errMsg}`);
+            }
             
             // 1. Handle Status Updates
             if (json.status !== undefined) {
@@ -996,7 +1060,7 @@ el.topBarToggle.addEventListener('click', toggleSidebar);
 el.mobileToggle.addEventListener('click', toggleMobileSidebar);
 document.addEventListener('click', e => {
   if (window.innerWidth <= 720 && el.sidebar.classList.contains('mobile-open')) {
-    if (!el.sidebar.contains(e.target) && e.target !== el.mobileToggle) el.sidebar.classList.remove('mobile-open');
+    if (!el.sidebar.contains(e.target) && !el.mobileToggle.contains(e.target)) el.sidebar.classList.remove('mobile-open');
   }
 });
 el.newChatBtn.addEventListener('click', () => { newChat(); if (window.innerWidth <= 720) el.sidebar.classList.remove('mobile-open'); });
@@ -1441,3 +1505,555 @@ renderMermaidDiagrams = async function() {
   await originalRenderMermaid();
   attachInspectorToCanvases();
 };
+
+// ═══════════════════════════════════════════════════════════════
+// RedX v5.0 — New Features
+// ═══════════════════════════════════════════════════════════════
+
+// ── Proxy Token Setup ──────────────────────────────────────────
+async function fetchProxyToken() {
+  try {
+    const res = await fetch(API_BASE + '/api/proxy-token');
+    if (res.ok) {
+      const data = await res.json();
+      state.proxyToken = data.token;
+      localStorage.setItem('redx_proxy_token', data.token);
+      console.log('[Auth] Proxy token acquired');
+    }
+  } catch (e) { console.warn('[Auth] Could not fetch proxy token:', e); }
+}
+
+// Helper: add proxy auth headers to all requests
+function proxyHeaders(extra = {}) {
+  return { 'X-Proxy-Token': state.proxyToken, ...extra };
+}
+
+// ── API Key Validation ─────────────────────────────────────────
+async function validateApiKey(key) {
+  try {
+    const res = await fetch(API_BASE + '/api/validate-key', {
+      method: 'POST',
+      headers: proxyHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ key }),
+    });
+    const data = await res.json();
+    const statusEl = document.getElementById('apiStatus');
+    if (data.valid) {
+      statusEl.textContent = '✅ API Key Valid';
+      statusEl.style.color = '#22c55e';
+      showToast('API key validated successfully!', 'success');
+    } else {
+      statusEl.textContent = '❌ ' + (data.error || 'Invalid key');
+      statusEl.style.color = '#ef4444';
+      showToast('API key validation failed: ' + data.error, 'error');
+    }
+  } catch (e) {
+    console.error('Key validation failed:', e);
+  }
+}
+
+// ── Token Usage Counter ────────────────────────────────────────
+async function fetchTokenUsage() {
+  if (!state.apiKey) return;
+  try {
+    const res = await fetch(API_BASE + '/api/token-usage', {
+      headers: proxyHeaders({ 'Authorization': `Bearer ${state.apiKey}` }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const section = document.getElementById('tokenUsageSection');
+    const fill = document.getElementById('tokenUsageFill');
+    const text = document.getElementById('tokenUsageText');
+    if (data.data) {
+      const used = data.data.usage || 0;
+      const limit = data.data.limit || 1;
+      const pct = Math.min((used / limit) * 100, 100);
+      fill.style.width = pct + '%';
+      fill.style.background = pct > 80 ? 'linear-gradient(90deg, #ef4444, #f87171)' : 'linear-gradient(90deg, #7c6dfa, #a78bfa)';
+      text.textContent = `${(used / 1000).toFixed(1)}K / ${(limit / 1000).toFixed(1)}K tokens`;
+      section.style.display = 'block';
+    }
+  } catch (e) { /* silent */ }
+}
+
+// ── Vault Password Recovery ────────────────────────────────────
+function vaultForceReset() {
+  if (!confirm('⚠️ This will PERMANENTLY destroy your encrypted vault. Your API key will be lost. Continue?')) return;
+  if (!confirm('🔴 FINAL WARNING: There is no recovery. Type OK to confirm.')) return;
+  vaultDestroy();
+  state.apiKey = '';
+  vaultShowState();
+  showToast('Vault destroyed. Set up a new one.', 'error');
+}
+window.vaultForceReset = vaultForceReset;
+
+// ── Conversation Search ────────────────────────────────────────
+function setupConversationSearch() {
+  const input = document.getElementById('chatSearchInput');
+  if (!input) return;
+  input.addEventListener('input', () => {
+    const q = input.value.toLowerCase().trim();
+    const items = el.chatHistory.querySelectorAll('.history-item');
+    items.forEach(item => {
+      const title = item.textContent.toLowerCase();
+      if (!q || title.includes(q)) {
+        item.style.display = '';
+      } else {
+        // Also check message content
+        const cId = item.dataset?.chatId;
+        const convo = state.conversations.find(c => c.title.toLowerCase().includes(q) ||
+          c.messages.some(m => m.content.toLowerCase().includes(q)));
+        item.style.display = convo ? '' : 'none';
+      }
+    });
+  });
+}
+
+// ── Vault Search ───────────────────────────────────────────────
+let vaultSearchDebounce;
+function setupVaultSearch() {
+  const input = document.getElementById('vaultSearchInput');
+  if (!input) return;
+  input.addEventListener('input', () => {
+    clearTimeout(vaultSearchDebounce);
+    vaultSearchDebounce = setTimeout(async () => {
+      const q = input.value.trim();
+      if (!q) { fetchVault(); return; }
+      try {
+        const res = await fetch(API_BASE + `/vault/search?q=${encodeURIComponent(q)}&n=10`, {
+          headers: proxyHeaders(),
+        });
+        const data = await res.json();
+        if (data.length) {
+          el.vaultItemsList.innerHTML = data.map((item, i) => `
+            <div class="vault-item-card">
+              <div class="vault-item-title">🔍 Search Result #${i + 1}</div>
+              <div class="vault-item-content collapsed" onclick="toggleVaultExpand(this)">${escHtml(item.content)}</div>
+              <div class="vault-expand-hint" onclick="toggleVaultExpand(this.previousElementSibling)">Read More...</div>
+            </div>
+          `).join('');
+        } else {
+          el.vaultItemsList.innerHTML = '<div class="empty-vault">No results found.</div>';
+        }
+      } catch (e) { console.error('Vault search failed:', e); }
+    }, 300);
+  });
+
+  // Load topic pills
+  loadVaultTopics();
+}
+
+async function loadVaultTopics() {
+  try {
+    const res = await fetch(API_BASE + '/vault/topics', { headers: proxyHeaders() });
+    const topics = await res.json();
+    const container = document.getElementById('vaultTopicPills');
+    if (!container || !topics.length) return;
+    container.innerHTML = topics.slice(0, 15).map(t =>
+      `<button class="vault-topic-pill" onclick="filterVaultByTopic(this, '${escHtml(t)}')">${escHtml(t.slice(0, 30))}</button>`
+    ).join('');
+  } catch (e) { /* silent */ }
+}
+window.filterVaultByTopic = function(btn, topic) {
+  document.getElementById('vaultSearchInput').value = topic;
+  document.getElementById('vaultSearchInput').dispatchEvent(new Event('input'));
+  document.querySelectorAll('.vault-topic-pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+};
+
+// ── Vault Tab Switching (Chunks / Graph) ───────────────────────
+function switchVaultTab(tab) {
+  const listEl = document.getElementById('vaultItemsList');
+  const searchEl = document.querySelector('.vault-search-wrap');
+  const graphEl = document.getElementById('graphCanvasWrap');
+  const tabList = document.getElementById('vaultTabList');
+  const tabGraph = document.getElementById('vaultTabGraph');
+
+  if (tab === 'list') {
+    listEl.style.display = '';
+    if (searchEl) searchEl.style.display = '';
+    graphEl.style.display = 'none';
+    tabList.classList.add('active');
+    tabGraph.classList.remove('active');
+  } else {
+    listEl.style.display = 'none';
+    if (searchEl) searchEl.style.display = 'none';
+    graphEl.style.display = 'block';
+    tabList.classList.remove('active');
+    tabGraph.classList.add('active');
+    renderKnowledgeGraph();
+  }
+}
+window.switchVaultTab = switchVaultTab;
+
+// ── Knowledge Graph Visualization ──────────────────────────────
+async function renderKnowledgeGraph() {
+  try {
+    const res = await fetch(API_BASE + '/vault/graph', { headers: proxyHeaders() });
+    const data = await res.json();
+    const container = document.getElementById('graphCanvas');
+    if (!container) return;
+
+    if (!data.nodes.length) {
+      container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#888;font-size:14px;">No knowledge graph data yet. Start chatting to build connections.</div>';
+      return;
+    }
+
+    const nodes = new vis.DataSet(data.nodes.map(n => ({
+      id: n.id, label: n.label,
+      color: { background: '#1a1a2e', border: '#7c6dfa', highlight: { background: '#7c6dfa', border: '#a78bfa' } },
+      font: { color: '#fff', size: 12, face: 'Inter' },
+      shape: 'dot', size: 15,
+    })));
+    const edges = new vis.DataSet(data.edges.map(e => ({
+      from: e.from, to: e.to, label: e.label,
+      color: { color: '#444', highlight: '#7c6dfa' },
+      font: { color: '#888', size: 9, face: 'Inter' },
+      arrows: 'to',
+    })));
+
+    new vis.Network(container, { nodes, edges }, {
+      physics: { stabilization: { iterations: 150 }, barnesHut: { gravitationalConstant: -3000 } },
+      interaction: { hover: true, zoomView: true },
+      layout: { improvedLayout: true },
+    });
+  } catch (e) { console.error('Graph render failed:', e); }
+}
+
+// ── Quick Prompt Templates ─────────────────────────────────────
+const TEMPLATES = [
+  { cat: 'recon', icon: '🌐', text: 'Enumerate the full attack surface of [target domain] including subdomains, open ports, and services.' },
+  { cat: 'recon', icon: '🔎', text: 'Perform OSINT deep-dive on [target organization] — find employees, tech stack, leaked credentials, and exposed assets.' },
+  { cat: 'recon', icon: '📡', text: 'Map all API endpoints for [target application URL] and identify authentication weaknesses.' },
+  { cat: 'exploit', icon: '💻', text: 'Write a proof-of-concept exploit for [CVE-ID] with step-by-step reproduction instructions.' },
+  { cat: 'exploit', icon: '🐚', text: 'Generate an obfuscated reverse shell payload for [target OS] that bypasses common AV/EDR solutions.' },
+  { cat: 'exploit', icon: '💉', text: 'Develop a custom SQL injection payload to bypass [specific WAF] on a [database type] backend.' },
+  { cat: 'analysis', icon: '🔍', text: 'Review this code for security vulnerabilities, focusing on injection, auth bypass, and data exposure risks.' },
+  { cat: 'analysis', icon: '📋', text: 'Analyze CVE-[YEAR]-[ID] — explain the vulnerability, affected versions, exploit path, and remediation steps.' },
+  { cat: 'analysis', icon: '🛡️', text: 'Evaluate the security posture of this [cloud/network/application] architecture and identify weaknesses.' },
+  { cat: 'report', icon: '📊', text: 'Generate an executive summary of the penetration test findings from our conversation.' },
+  { cat: 'report', icon: '📝', text: 'Write detailed remediation steps for [vulnerability type] with priority levels and implementation guidance.' },
+  { cat: 'report', icon: '📈', text: 'Create a CVSS 3.1 scoring breakdown for [vulnerability description] and suggest risk rating.' },
+  { cat: 'builder', icon: '🛠️', text: 'Build a Python tool that automates [task] for penetration testing — include CLI args, error handling, and logging.' },
+  { cat: 'builder', icon: '⚙️', text: 'Design a modular security scanner framework that supports plugin-based vulnerability checks.' },
+  { cat: 'builder', icon: '🔧', text: 'Create a Bash automation script that chains nmap → gobuster → nikto for a full web app assessment.' },
+];
+
+function renderTemplates(filter = 'all') {
+  const grid = document.getElementById('templateGrid');
+  if (!grid) return;
+  const filtered = filter === 'all' ? TEMPLATES : TEMPLATES.filter(t => t.cat === filter);
+  grid.innerHTML = filtered.map(t => `
+    <button class="template-card" onclick="useTemplate(this)" data-text="${escHtml(t.text)}">
+      <span class="template-icon">${t.icon}</span>${escHtml(t.text.slice(0, 80))}${t.text.length > 80 ? '…' : ''}
+    </button>
+  `).join('');
+}
+
+function useTemplate(btn) {
+  const text = btn.dataset.text;
+  el.messageInput.value = text;
+  autoResize(el.messageInput);
+  updateCharCount();
+  el.sendBtn.disabled = false;
+  el.messageInput.focus();
+  // Select placeholder text for easy editing
+  const bracketMatch = text.match(/\[([^\]]+)\]/);
+  if (bracketMatch) {
+    const start = text.indexOf(bracketMatch[0]);
+    el.messageInput.setSelectionRange(start, start + bracketMatch[0].length);
+  }
+}
+window.useTemplate = useTemplate;
+
+// ── File Upload ────────────────────────────────────────────────
+function setupFileUpload() {
+  const attachBtn = document.getElementById('attachBtn');
+  const fileInput = document.getElementById('fileUpload');
+  if (!attachBtn || !fileInput) return;
+
+  attachBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', handleFileSelect);
+
+  // Drag and drop on input area
+  const inputWrapper = document.getElementById('inputWrapper');
+  if (inputWrapper) {
+    inputWrapper.addEventListener('dragover', e => { e.preventDefault(); inputWrapper.classList.add('drag-over'); });
+    inputWrapper.addEventListener('dragleave', () => inputWrapper.classList.remove('drag-over'));
+    inputWrapper.addEventListener('drop', e => {
+      e.preventDefault();
+      inputWrapper.classList.remove('drag-over');
+      handleFiles(e.dataTransfer.files);
+    });
+  }
+}
+
+function handleFileSelect(e) { handleFiles(e.target.files); }
+
+async function handleFiles(fileList) {
+  const MAX_SIZE = 15 * 1024 * 1024; // 15MB
+  for (const file of fileList) {
+    if (file.size > MAX_SIZE) { showToast(`${file.name} exceeds 15MB limit`, 'error'); continue; }
+
+    const isImage = file.type.startsWith('image/');
+
+    if (isImage) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        state.attachedFiles.push({ name: file.name, type: 'image', data: e.target.result });
+        renderAttachedFiles();
+      };
+      reader.readAsDataURL(file);
+    } else {
+      // Send document to backend for ChromaDB vectorization
+      const formData = new FormData();
+      formData.append('files', file);
+      
+      showToast(`Uploading ${file.name} to knowledge vault...`);
+      
+      try {
+        const res = await fetch(API_BASE + '/api/upload', {
+          method: 'POST',
+          headers: { 'X-Proxy-Token': state.proxyToken },
+          body: formData
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast(data.message, 'success');
+          state.attachedFiles.push({ name: file.name, type: 'vault_doc' });
+          renderAttachedFiles();
+        } else {
+          showToast(data.error || 'Upload failed', 'error');
+        }
+      } catch (e) {
+        showToast('Upload error: ' + e.message, 'error');
+      }
+    }
+  }
+}
+
+function renderAttachedFiles() {
+  const container = document.getElementById('attachedFiles');
+  if (!container) return;
+  if (!state.attachedFiles.length) { container.style.display = 'none'; return; }
+  container.style.display = 'flex';
+  container.innerHTML = state.attachedFiles.map((f, i) => `
+    <div class="attached-file-chip">
+      ${f.type === 'image' ? '🖼️' : '📄'} ${escHtml(f.name)}
+      <span class="remove-file" onclick="removeAttachedFile(${i})">×</span>
+    </div>
+  `).join('');
+  el.sendBtn.disabled = false;
+}
+
+function removeAttachedFile(idx) {
+  state.attachedFiles.splice(idx, 1);
+  renderAttachedFiles();
+  if (!state.attachedFiles.length && !el.messageInput.value.trim()) el.sendBtn.disabled = true;
+}
+window.removeAttachedFile = removeAttachedFile;
+
+// Build message content with attachments
+function buildMessageWithAttachments(text) {
+  if (!state.attachedFiles.length) return text;
+
+  const parts = [];
+  // Add text files as code blocks
+  const textFiles = state.attachedFiles.filter(f => f.type === 'text');
+  let textContent = text;
+  if (textFiles.length) {
+    textContent += '\n\n' + textFiles.map(f =>
+      `\`\`\`${f.name}\n${f.content}\n\`\`\``
+    ).join('\n\n');
+  }
+
+  // Check for images — use multimodal format
+  const imageFiles = state.attachedFiles.filter(f => f.type === 'image');
+  if (imageFiles.length) {
+    parts.push({ type: 'text', text: textContent });
+    imageFiles.forEach(f => {
+      parts.push({ type: 'image_url', image_url: { url: f.data } });
+    });
+    state.attachedFiles = [];
+    renderAttachedFiles();
+    return parts; // Return array for multimodal
+  }
+
+  state.attachedFiles = [];
+  renderAttachedFiles();
+  return textContent; // Return string for text-only
+}
+
+// ── Pentest Report Generator ───────────────────────────────────
+async function generatePentestReport() {
+  const c = activeConvo();
+  if (!c || !c.messages.length) { showToast('No conversation to generate report from', 'error'); return; }
+  if (!state.apiKey) { showToast('Unlock vault first', 'error'); return; }
+
+  showToast('Generating pentest report...', 'success');
+
+  const chatLog = c.messages.map(m =>
+    `[${m.role.toUpperCase()}]: ${m.content}`
+  ).join('\n\n---\n\n');
+
+  const reportPrompt = `You are a professional penetration testing report writer. Analyze the following chat log between a security researcher and an AI assistant, then generate a structured penetration test report in markdown format.
+
+CHAT LOG:
+${chatLog.slice(0, 20000)}
+
+Generate a report with these sections:
+# Penetration Test Report - ${c.title}
+## Executive Summary
+## Scope & Methodology
+## Findings (with CVSS scores where applicable)
+### Finding 1: [Title]
+- **Severity:** Critical/High/Medium/Low
+- **CVSS 3.1 Score:** X.X
+- **Description:**
+- **Evidence:**
+- **Remediation:**
+## Recommendations (prioritized)
+## Appendix
+
+Be thorough and professional. Extract real findings from the conversation.`;
+
+  try {
+    const res = await fetch(API_BASE + '/proxy/v1/chat/completions', {
+      method: 'POST',
+      headers: proxyHeaders({
+        'Authorization': `Bearer ${state.apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': location.href,
+        'X-Title': 'RedX Report Generator',
+      }),
+      body: JSON.stringify({
+        model: state.model,
+        messages: [{ role: 'user', content: reportPrompt }],
+        stream: false,
+        temperature: 0.2,
+        max_tokens: 8192,
+        no_agent: true,
+      }),
+    });
+
+    const data = await res.json();
+    const reportContent = data.choices?.[0]?.message?.content || 'Report generation failed.';
+    const blob = new Blob([reportContent], { type: 'text/markdown' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `RedX_Report_${c.title.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().slice(0, 10)}.md`;
+    a.click();
+    showToast('Pentest report exported! 📋', 'success');
+  } catch (e) {
+    showToast('Report generation failed: ' + e.message, 'error');
+  }
+}
+
+// ── Side-by-Side Model Comparison ──────────────────────────────
+function toggleCompareMode() {
+  state.compareMode = !state.compareMode;
+  const btn = document.getElementById('compareBtn');
+  btn.classList.toggle('active', state.compareMode);
+
+  if (state.compareMode) {
+    showToast('Compare mode: next message will be sent to 2 models side-by-side', 'success');
+  } else {
+    showToast('Compare mode disabled');
+  }
+}
+
+async function sendCompare(text) {
+  const models = [state.model, 'deepseek/deepseek-v4-flash:free'];
+  if (models[0] === models[1]) models[1] = 'openai/gpt-oss-120b:free';
+
+  const c = activeConvo();
+  c.messages.push({ role: 'user', content: text });
+  renderMessages();
+
+  const compareEl = document.createElement('div');
+  compareEl.className = 'compare-container';
+  compareEl.innerHTML = models.map((m, i) => `
+    <div class="compare-column" id="compare-col-${i}">
+      <div class="compare-column-header">
+        <strong>${escHtml(m.split('/').pop().split(':')[0])}</strong>
+      </div>
+      <div class="compare-body" id="compare-body-${i}">⏳ Loading...</div>
+    </div>
+  `).join('');
+
+  const msgEl = appendMessage('assistant', '', true);
+  msgEl.querySelector('.message-body').appendChild(compareEl);
+
+  const msgs = [];
+  if (state.systemPrompt.trim()) msgs.push({ role: 'system', content: state.systemPrompt.trim() });
+  msgs.push(...c.messages.map(m => ({ role: m.role, content: m.content })));
+
+  const promises = models.map(async (model, i) => {
+    try {
+      const res = await fetch(API_BASE + '/proxy/v1/chat/completions', {
+        method: 'POST',
+        headers: proxyHeaders({
+          'Authorization': `Bearer ${state.apiKey}`,
+          'Content-Type': 'application/json',
+          'X-Title': 'RedX Compare',
+        }),
+        body: JSON.stringify({ model, messages: msgs, stream: false, temperature: 0.3, max_tokens: 2048, no_agent: true }),
+      });
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content || 'No response';
+      document.getElementById(`compare-body-${i}`).innerHTML = renderMarkdown(content);
+    } catch (e) {
+      document.getElementById(`compare-body-${i}`).innerHTML = `<span style="color:#ef4444;">Error: ${e.message}</span>`;
+    }
+  });
+
+  await Promise.all(promises);
+  c.messages.push({ role: 'assistant', content: '[Compare mode — see side-by-side output above]' });
+  save();
+  state.compareMode = false;
+  document.getElementById('compareBtn')?.classList.remove('active');
+}
+
+// ── Initialize All New Features ────────────────────────────────
+(async function initV5Features() {
+  // 1. Fetch proxy token if not cached
+  if (!state.proxyToken) await fetchProxyToken();
+
+  // 2. Setup conversation search
+  setupConversationSearch();
+
+  // 3. Setup vault search
+  setupVaultSearch();
+
+  // 4. Setup file upload
+  setupFileUpload();
+
+  // 5. Render quick prompt templates
+  renderTemplates();
+
+  // 6. Template tab handlers
+  document.querySelectorAll('.template-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.template-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      renderTemplates(tab.dataset.cat);
+    });
+  });
+
+  // 7. Compare mode button
+  const compareBtn = document.getElementById('compareBtn');
+  if (compareBtn) compareBtn.addEventListener('click', toggleCompareMode);
+
+  // 8. Report button
+  const reportBtn = document.getElementById('reportBtn');
+  if (reportBtn) reportBtn.addEventListener('click', generatePentestReport);
+
+  // 9. Token usage polling
+  if (state.apiKey) fetchTokenUsage();
+  setInterval(() => { if (state.apiKey) fetchTokenUsage(); }, 60000);
+
+  // 10. Validate key on vault unlock
+  const origUnlock = vaultHandleUnlock;
+  // Key validation happens after unlock
+})();
+

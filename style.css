@@ -365,7 +365,10 @@ body {
   font-size: 0.75rem;
   margin-top: 5px;
   padding-left: 2px;
-  height: 16px;
+  min-height: 16px;
+  height: auto;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .api-status.saved {
@@ -459,7 +462,7 @@ body {
 
 .top-bar-actions {
   display: flex;
-  gap: 6px;
+  gap: 12px;
 }
 
 .icon-btn {
@@ -506,8 +509,9 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 40px 20px;
+  margin: auto 0;
   text-align: center;
   gap: 36px;
 }
@@ -1045,6 +1049,7 @@ body {
   justify-content: center;
   position: relative;
   transition: all 0.2s;
+  line-height: 0;
 }
 
 .scrutiny-toggle-btn:hover {
@@ -2699,3 +2704,169 @@ table {
   border: 1px solid rgba(124, 109, 250, 0.2) !important;
   overflow: visible !important;
 }
+/* ═══════════════════════════════════════════════════════════════
+   RedX v5.0 — New Feature Styles
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Conversation Search ────────────────────────────────────── */
+.chat-search-wrap { padding: 0 12px 8px; }
+.chat-search-input {
+  width: 100%; padding: 8px 12px; border-radius: 8px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text); font-size: 12px; font-family: var(--font); outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.chat-search-input:-webkit-autofill,
+.chat-search-input:-webkit-autofill:hover, 
+.chat-search-input:-webkit-autofill:focus, 
+.chat-search-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px #0e0f14 inset !important;
+  -webkit-text-fill-color: var(--text) !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+.chat-search-input:focus { border-color: var(--accent, #7c6dfa); }
+.chat-search-input::placeholder { color: var(--text3, #666); }
+
+/* ── Token Usage Bar ────────────────────────────────────────── */
+.token-usage-section { padding: 0 16px; }
+.token-usage-bar-wrap { margin-top: 6px; }
+.token-usage-bar {
+  width: 100%; height: 6px; border-radius: 3px;
+  background: rgba(255,255,255,0.06); overflow: hidden;
+}
+.token-usage-fill {
+  height: 100%; border-radius: 3px; transition: width 0.5s ease;
+  background: linear-gradient(90deg, #7c6dfa, #a78bfa);
+}
+.token-usage-text {
+  font-size: 10px; color: var(--text3, #888); margin-top: 4px;
+  font-family: var(--font-mono, monospace);
+}
+
+/* ── Vault Forgot Password ──────────────────────────────────── */
+.vault-forgot-link { margin-top: 8px; text-align: center; }
+.vault-forgot-link a {
+  font-size: 11px; color: var(--text3, #888); text-decoration: none;
+  transition: color 0.2s;
+}
+.vault-forgot-link a:hover { color: #ff5555; text-decoration: underline; }
+
+/* ── Vault Search & Topics ──────────────────────────────────── */
+.vault-search-wrap { padding: 12px 20px; }
+.vault-search-input {
+  width: 100%; padding: 10px 14px; border-radius: 10px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text); font-size: 13px; font-family: var(--font); outline: none;
+}
+.vault-search-input:focus { border-color: var(--accent, #7c6dfa); }
+.vault-topic-pills {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+}
+.vault-topic-pill {
+  padding: 4px 10px; border-radius: 12px; font-size: 11px;
+  background: rgba(124,109,250,0.15); color: #a78bfa; border: none;
+  cursor: pointer; transition: all 0.2s;
+}
+.vault-topic-pill:hover { background: rgba(124,109,250,0.3); }
+.vault-topic-pill.active { background: #7c6dfa; color: #fff; }
+
+/* ── Vault Tabs (Chunks / Graph) ────────────────────────────── */
+.vault-tab-btn {
+  padding: 6px 14px; border-radius: 8px; font-size: 11px; font-weight: 600;
+  background: rgba(255,255,255,0.05); color: var(--text3, #888); border: 1px solid rgba(255,255,255,0.08);
+  cursor: pointer; transition: all 0.2s;
+}
+.vault-tab-btn.active { background: rgba(124,109,250,0.2); color: #7c6dfa; border-color: rgba(124,109,250,0.4); }
+
+/* ── Quick Prompt Templates ─────────────────────────────────── */
+.template-section { margin-top: 24px; }
+.template-tabs {
+  display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-bottom: 12px;
+}
+.template-tab {
+  padding: 5px 12px; border-radius: 16px; font-size: 11px; font-weight: 500;
+  background: rgba(255,255,255,0.05); color: var(--text3, #888);
+  border: 1px solid rgba(255,255,255,0.06); cursor: pointer; transition: all 0.2s;
+}
+.template-tab:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+.template-tab.active { background: rgba(124,109,250,0.2); color: #7c6dfa; border-color: rgba(124,109,250,0.3); }
+.template-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px; max-height: 240px; overflow-y: auto;
+}
+.template-card {
+  padding: 10px 14px; border-radius: 10px; font-size: 12px; line-height: 1.4;
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+  color: var(--text2, #ccc); cursor: pointer; transition: all 0.2s; text-align: left;
+}
+.template-card:hover {
+  background: rgba(124,109,250,0.1); border-color: rgba(124,109,250,0.3);
+  transform: translateY(-1px);
+}
+.template-card .template-icon { font-size: 16px; margin-right: 6px; }
+
+/* ── File Attachments ───────────────────────────────────────── */
+.attached-files {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0 0;
+}
+.attached-file-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 8px; font-size: 11px;
+  background: rgba(124,109,250,0.15); color: #a78bfa;
+  border: 1px solid rgba(124,109,250,0.3);
+}
+.attached-file-chip .remove-file {
+  cursor: pointer; font-weight: bold; opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.attached-file-chip .remove-file:hover { opacity: 1; color: #ff5555; }
+
+/* ── Builder Progress Panel ─────────────────────────────────── */
+.builder-progress {
+  background: rgba(124,109,250,0.08); border: 1px solid rgba(124,109,250,0.2);
+  border-radius: 12px; padding: 14px 18px; margin-bottom: 8px;
+}
+.builder-progress-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.builder-progress-title {
+  font-size: 12px; font-weight: 600; color: #7c6dfa;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.builder-timer { font-size: 12px; color: var(--text3); font-family: var(--font-mono); }
+.builder-agents-list { display: flex; flex-direction: column; gap: 4px; }
+.builder-agent-row {
+  display: flex; align-items: center; gap: 8px; font-size: 12px;
+  color: var(--text2);
+}
+.builder-agent-row .agent-status { width: 18px; text-align: center; }
+.builder-progress-bar {
+  width: 100%; height: 4px; background: rgba(255,255,255,0.06);
+  border-radius: 2px; margin-top: 10px; overflow: hidden;
+}
+.builder-progress-fill {
+  height: 100%; border-radius: 2px; transition: width 0.4s ease;
+  background: linear-gradient(90deg, #7c6dfa, #a78bfa, #c084fc);
+}
+
+/* ── Compare Mode ───────────────────────────────────────────── */
+.compare-container {
+  display: flex; gap: 12px; width: 100%;
+}
+.compare-column {
+  flex: 1; min-width: 0;
+  background: rgba(255,255,255,0.02); border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.06); padding: 12px;
+  overflow-y: auto;
+}
+.compare-column-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.compare-column-header select {
+  flex: 1; padding: 6px 10px; border-radius: 6px; font-size: 11px;
+  background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid rgba(255,255,255,0.1);
+}
+

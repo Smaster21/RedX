@@ -36,6 +36,11 @@
       }
     });
   </script>
+  <!-- vis.js for Knowledge Graph visualization -->
+  <script src="https://cdn.jsdelivr.net/npm/vis-network@9/dist/vis-network.min.js"></script>
+  <!-- pdf.js for PDF text extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>if(window.pdfjsLib)window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 </head>
 <body>
 
@@ -74,6 +79,10 @@
       </button>
 
       <div class="sidebar-section-label">Recent</div>
+      <!-- Conversation Search -->
+      <div class="chat-search-wrap">
+        <input type="text" id="chatSearchInput" class="chat-search-input" placeholder="🔍 Search conversations..." autocomplete="new-password" spellcheck="false" />
+      </div>
       <div class="chat-history" id="chatHistory">
         <!-- Populated by JS -->
       </div>
@@ -84,57 +93,160 @@
         <div class="model-selector-wrap">
           <select id="modelSelect" class="model-select">
 
-            <!-- ══ CONFIRMED WORKING — PENTESTING READY ══ -->
-            <optgroup label="✅ Working Now — Pentest &amp; Red Team (Free)">
+            <!-- ══ CATEGORY 1: TOP TIER — BEST OVERALL RED TEAM ══ -->
+            <optgroup label="🔥 Top Tier — Best Overall Red Team &amp; PT (Free)">
               <option value="openai/gpt-oss-120b:free" selected>
-                GPT-OSS 120B · 131K ctx · Cutoff: 2024 ★
-              </option>
-              <option value="inclusionai/ring-2.6-1t:free">
-                Ring 2.6 1T (Thinking) · 262K ctx · Agentic
-              </option>
-              <option value="qwen/qwen3-coder:free">
-                Qwen3 Coder · Extreme Exploit Dev ★
-              </option>
-              <option value="nvidia/llama-nemotron-embed-vl-1b-v2:free">
-                Nemotron VL 1B · Vision/Embed
-              </option>
-              <option value="openai/gpt-oss-20b:free">
-                GPT-OSS 20B · 131K ctx · Cutoff: 2024
+                GPT-OSS 120B ★ · General PT · Exploit Dev · 131K ctx
               </option>
               <option value="nvidia/nemotron-3-super-120b-a12b:free">
-                Nemotron Super 120B · 262K ctx · Cutoff: 2024
+                Nemotron 3 Super 120B ★ · Best PT Reasoning · 1M ctx
               </option>
-              <option value="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free">
-                Nemotron Nano Omni 30B · 256K ctx · Cutoff: 2024
+              <option value="deepseek/deepseek-v4-flash:free">
+                DeepSeek V4 Flash ★ · OSINT · Recon · 1M ctx (Longest!)
               </option>
-            </optgroup>
-
-            <!-- ══ SHADOW OPS — FRONTIER PRO (MAY 2026) ══ -->
-            <optgroup label="🌑 Shadow Ops — Frontier Pro (Free Tier)">
-              <option value="openrouter/owl-alpha">
-                Owl Alpha (204B) · April 2026 · 1M Context ★
+              <option value="qwen/qwen3-coder:free">
+                Qwen3 Coder 480B A35B ★ · Exploit Code · Shellcode · Top Coder
               </option>
               <option value="poolside/laguna-m.1:free">
-                Poolside Laguna M.1 (158B) · April 2026 · Coding Expert
-              </option>
-              <option value="nousresearch/hermes-3-llama-3.1-405b:free">
-                Hermes 3 405B · Uncensored · Expert Logic
+                Poolside Laguna M.1 ★ · Payload Dev · Code Gen · 131K ctx
               </option>
             </optgroup>
 
-            <!-- ══ SECURITY RESEARCH — MAY 2026 FAVORITES ══ -->
-            <optgroup label="🔄 Security Research — High Reasoning (Free)">
-              <option value="nvidia/nemotron-3-nano-omni:free">
-                NVIDIA Nemotron 3 Nano · Omni-modal · April 2026
+            <!-- ══ CATEGORY 2: EXPLOIT DEV &amp; CODE INJECTION ══ -->
+            <optgroup label="💻 Exploit Dev &amp; Code Injection (Free)">
+              <option value="openai/gpt-oss-20b:free">
+                GPT-OSS 20B · PoC Code · Fuzzing Scripts · 131K ctx
               </option>
-              <option value="cognitivecomputations/dolphin-mistral-24b-venice-edition:free">
-                Venice Uncensored (Dolphin 24B) · No filter
+              <option value="poolside/laguna-xs.2:free">
+                Laguna XS.2 · Fast Payload Gen · Light Scripting · 131K ctx
               </option>
-              <option value="qwen/qwen-3.6-flash:free">
-                Qwen 3.6 Flash · Fast &amp; Technical · April 2026
+              <option value="baidu/cobuddy:free">
+                CoBuddy (Baidu) · Code Assist · Debugging · 131K ctx
+              </option>
+              <option value="qwen/qwen3-next-80b-a3b-instruct:free">
+                Qwen3 Next 80B A3B · Code + Reasoning · 262K ctx
+              </option>
+            </optgroup>
+
+            <!-- ══ CATEGORY 3: DEEP REASONING &amp; CTF SOLVING ══ -->
+            <optgroup label="🧠 Deep Reasoning &amp; CTF Solving (Free)">
+              <option value="arcee-ai/trinity-large-thinking:free">
+                Trinity Large (Thinking) · CTF · Chain-of-Thought · 262K ctx
+              </option>
+              <option value="z-ai/glm-4.5-air:free">
+                GLM 4.5 Air (Z.AI) · Logic · Multi-step Attack Chains · 131K ctx
+              </option>
+              <option value="nousresearch/hermes-3-llama-3.1-405b:free">
+                Hermes 3 405B · Uncensored · Advanced Logic · 131K ctx
+              </option>
+              <option value="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free">
+                Nemotron Nano Omni 30B · Reasoning · Multi-modal · 256K ctx
+              </option>
+              <option value="minimax/minimax-m2.5:free">
+                MiniMax M2.5 · Long-context Reasoning · 204K ctx
+              </option>
+            </optgroup>
+
+            <!-- ══ CATEGORY 4: RECON, OSINT &amp; LONG CONTEXT ══ -->
+            <optgroup label="🌐 Recon, OSINT &amp; Long-Context Analysis (Free)">
+              <option value="deepseek/deepseek-v4-flash:free">
+                DeepSeek V4 Flash · Full-doc Recon · 1,048K ctx (Max!)
+              </option>
+              <option value="minimax/minimax-m2.5:free">
+                MiniMax M2.5 · Log Analysis · Large Reports · 204K ctx
+              </option>
+              <option value="nvidia/nemotron-3-nano-30b-a3b:free">
+                Nemotron Nano 30B A3B · OSINT Summarizer · 256K ctx
+              </option>
+              <option value="arcee-ai/trinity-large-thinking:free">
+                Trinity Large (Thinking) · Structured Recon Plans · 262K ctx
               </option>
               <option value="meta-llama/llama-3.3-70b-instruct:free">
-                Llama 3.3 70B · Stable Reasoning · 65K ctx
+                Llama 3.3 70B · Stable OSINT · 131K ctx
+              </option>
+            </optgroup>
+
+            <!-- ══ CATEGORY 5: UNCENSORED / NO-FILTER OPS ══ -->
+            <optgroup label="🔓 Uncensored — No-Filter Offensive Ops (Free)">
+              <option value="cognitivecomputations/dolphin-mistral-24b-venice-edition:free">
+                Venice Uncensored (Dolphin 24B) · Zero Restrictions · 32K ctx
+              </option>
+              <option value="nousresearch/hermes-3-llama-3.1-405b:free">
+                Hermes 3 405B · Minimal Guardrails · Expert Logic · 131K ctx
+              </option>
+              <option value="nvidia/nemotron-3-nano-30b-a3b:free">
+                Nemotron Nano 30B A3B · Flexible · 256K ctx
+              </option>
+              <option value="baidu/cobuddy:free">
+                CoBuddy (Baidu) · Alternative Perspective · 131K ctx
+              </option>
+            </optgroup>
+
+            <!-- ══ CATEGORY 6: VISION / MULTIMODAL (SCREENSHOT ANALYSIS) ══ -->
+            <optgroup label="👁️ Vision &amp; Multimodal — Screenshot Analysis (Free)">
+              <option value="nvidia/nemotron-nano-12b-v2-vl:free">
+                Nemotron Nano 12B VL ★ · Screenshot → Exploit · 128K ctx
+              </option>
+              <option value="nvidia/llama-nemotron-embed-vl-1b-v2:free">
+                Nemotron Embed VL 1B · Visual Embedding · 131K ctx
+              </option>
+              <option value="google/gemma-4-31b-it:free">
+                Gemma 4 31B · Vision + Code Analysis · 262K ctx
+              </option>
+              <option value="google/gemma-4-26b-a4b-it:free">
+                Gemma 4 26B A4B · Vision + Recon · 262K ctx
+              </option>
+              <option value="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free">
+                Nemotron Nano Omni 30B · Omni-modal · Reasoning · 256K ctx
+              </option>
+            </optgroup>
+
+            <!-- ══ CATEGORY 7: FAST &amp; LIGHTWEIGHT — AUTOMATION &amp; SCRIPTING ══ -->
+            <optgroup label="⚡ Fast &amp; Lightweight — Automation &amp; Scripting (Free)">
+              <option value="meta-llama/llama-3.3-70b-instruct:free">
+                Llama 3.3 70B · Reliable Automation · 131K ctx
+              </option>
+              <option value="nvidia/nemotron-nano-9b-v2:free">
+                Nemotron Nano 9B V2 · Speed Scripts · 128K ctx
+              </option>
+              <option value="liquid/lfm-2.5-1.2b-thinking:free">
+                LFM 2.5 1.2B (Thinking) · Ultra-fast · Chain-of-thought · 32K ctx
+              </option>
+              <option value="liquid/lfm-2.5-1.2b-instruct:free">
+                LFM 2.5 1.2B (Instruct) · Ultra-fast Scripting · 32K ctx
+              </option>
+              <option value="meta-llama/llama-3.2-3b-instruct:free">
+                Llama 3.2 3B · Micro-agent · Command Parsing · 131K ctx
+              </option>
+              <option value="google/gemma-4-26b-a4b-it:free">
+                Gemma 4 26B A4B · Lightweight Efficient · 262K ctx
+              </option>
+            </optgroup>
+            <!-- ══ CATEGORY 8: TOOL & SOFTWARE BUILDER ══ -->
+            <optgroup label="🛠️ Tool &amp; Software Builder — Full Dev Knowledge (Free)">
+              <option value="__multi_agent_builder__">
+                ⚡ MULTI-AGENT BUILDER ★ — 5 AI Specialists in Parallel → Master Synthesis
+              </option>
+              <option value="qwen/qwen3-coder:free">
+                Qwen3 Coder 480B ★ · Best Tool Builder · APIs · Frameworks · Full Stack
+              </option>
+              <option value="poolside/laguna-m.1:free">
+                Laguna M.1 · Software Architecture · SDK Dev · 131K ctx
+              </option>
+              <option value="openai/gpt-oss-120b:free">
+                GPT-OSS 120B · Libraries · Docs · Security Tool Dev · 131K ctx
+              </option>
+              <option value="deepseek/deepseek-v4-flash:free">
+                DeepSeek V4 Flash · Codebase-wide Context · 1M ctx · Refactoring
+              </option>
+              <option value="poolside/laguna-xs.2:free">
+                Laguna XS.2 · Fast Prototyping · CLI Tools · Scripts · 131K ctx
+              </option>
+              <option value="qwen/qwen3-next-80b-a3b-instruct:free">
+                Qwen3 Next 80B A3B · Framework Knowledge · 262K ctx
+              </option>
+              <option value="nvidia/nemotron-3-super-120b-a12b:free">
+                Nemotron 3 Super 120B · Complex Systems · Architecture Design · 1M ctx
               </option>
             </optgroup>
 
@@ -170,6 +282,9 @@
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 015-4.9"/></svg>
               Unlock Vault
             </button>
+            <div class="vault-forgot-link">
+              <a href="#" id="vaultForgotBtn" onclick="vaultForceReset(); return false;">Forgot password? Destroy vault & start fresh →</a>
+            </div>
           </div>
 
           <!-- State: vault unlocked -->
@@ -192,6 +307,15 @@
             </div>
           </div>
           <div class="api-status" id="apiStatus"></div>
+        </div>
+
+        <!-- Token Usage Bar -->
+        <div class="token-usage-section" id="tokenUsageSection" style="display:none;">
+          <div class="sidebar-section-label" style="margin-top:10px;">Token Usage</div>
+          <div class="token-usage-bar-wrap">
+            <div class="token-usage-bar" id="tokenUsageBar"><div class="token-usage-fill" id="tokenUsageFill"></div></div>
+            <div class="token-usage-text" id="tokenUsageText">Loading...</div>
+          </div>
         </div>
 
         <div class="system-prompt-wrap">
@@ -218,6 +342,16 @@
         </button>
         <div class="top-bar-model" id="topBarModel">Gemma 4 31B</div>
         <div class="top-bar-actions">
+          <button class="icon-btn" id="compareBtn" title="Side-by-Side Model Comparison">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="8" height="18" rx="1"/><rect x="14" y="3" width="8" height="18" rx="1"/>
+            </svg>
+          </button>
+          <button class="icon-btn" id="reportBtn" title="Generate Pentest Report">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </button>
           <button class="icon-btn" id="renameChatBtn" title="Rename chat">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"></path>
@@ -267,6 +401,20 @@
               <span>WAF Bypass & SQLi Techniques</span>
             </button>
           </div>
+          <!-- Quick Prompt Templates -->
+          <div class="template-section">
+            <div class="template-tabs">
+              <button class="template-tab active" data-cat="all">All</button>
+              <button class="template-tab" data-cat="recon">🌐 Recon</button>
+              <button class="template-tab" data-cat="exploit">💻 Exploit</button>
+              <button class="template-tab" data-cat="analysis">🔍 Analysis</button>
+              <button class="template-tab" data-cat="report">📋 Report</button>
+              <button class="template-tab" data-cat="builder">🛠️ Builder</button>
+            </div>
+            <div class="template-grid" id="templateGrid">
+              <!-- Populated by JS -->
+            </div>
+          </div>
         </div>
 
         <!-- Messages will be appended here -->
@@ -289,16 +437,27 @@
           <div class="vault-ui-header">
             <h3>Knowledge Vault (Secondary Brain)</h3>
             <p>Intelligence stored locally. Model-agnostic and permanent.</p>
-            <div style="display:flex; gap: 10px;">
-              <button class="vault-btn vault-btn-danger" onclick="clearVault()" style="width: auto; padding: 6px 14px; font-size: 11px;">
+            <div style="display:flex; gap: 10px; align-items: center;">
+              <button class="vault-tab-btn active" id="vaultTabList" onclick="switchVaultTab('list')">📚 Chunks</button>
+              <button class="vault-tab-btn" id="vaultTabGraph" onclick="switchVaultTab('graph')">🕸️ Knowledge Map</button>
+              <button class="vault-btn vault-btn-danger" onclick="clearVault()" style="flex: 0 0 auto; margin-left: auto; width: auto; padding: 6px 14px; font-size: 11px;">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
                 Clear All
               </button>
               <button class="vault-close-btn" id="closeVaultBtn" style="position:static; width:32px; height:32px;">&times;</button>
             </div>
           </div>
+          <!-- Brain Search -->
+          <div class="vault-search-wrap">
+            <input type="text" id="vaultSearchInput" class="vault-search-input" placeholder="🔍 Search knowledge vault..." autocomplete="off" />
+            <div class="vault-topic-pills" id="vaultTopicPills"></div>
+          </div>
           <div class="vault-items-list" id="vaultItemsList">
             <div class="empty-vault">No intelligence stored yet. Start searching to build your brain.</div>
+          </div>
+          <!-- Knowledge Graph Canvas -->
+          <div id="graphCanvasWrap" style="display:none; width:100%; height:100%;">
+            <div id="graphCanvas" style="width:100%; height: calc(100vh - 200px); background: #0a0a0f; border-radius: 12px;"></div>
           </div>
         </div>
       </div>
@@ -314,6 +473,13 @@
             maxlength="32000"
           ></textarea>
           <div class="input-controls">
+            <!-- File Upload -->
+            <input type="file" id="fileUpload" multiple accept=".txt,.md,.py,.js,.json,.xml,.csv,.pdf,.png,.jpg,.jpeg,.gif,.svg,.html,.sh,.c,.cpp,.java,.go,.rs,.rb,.php,.yaml,.yml,.toml,.ini,.conf,.log,.nmap" style="display:none" />
+            <button class="scrutiny-toggle-btn" id="attachBtn" title="Attach files (images, code, PDFs)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+              </svg>
+            </button>
             <button class="scrutiny-toggle-btn" id="strictModeToggleBtn" title="Strict Scrutiny (Anti-Hallucination)">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
@@ -338,6 +504,8 @@
               </svg>
             </button>
           </div>
+          <!-- Attached Files Preview -->
+          <div class="attached-files" id="attachedFiles" style="display:none;"></div>
         </div>
         <div class="input-footer">
           RedX uses <strong>OpenRouter</strong> API. Key encrypted with <strong>AES-256-GCM</strong> — never leaves your device.
@@ -366,6 +534,7 @@
     </div>
   </div>
   <script src="vault.js"></script>
-  <script src="app.js?v=triple_threat_v1"></script>
+  <script src="graph.js"></script>
+  <script src="app.js?v=v5.0"></script>
 </body>
 </html>
