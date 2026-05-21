@@ -19,10 +19,14 @@ from dotenv import load_dotenv
 from knowledge_engine import engine
 
 try:
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
 except ImportError:
-    DDGS = None
-    logging.warning("duckduckgo_search not installed — DDG search will be unavailable")
+    try:
+        from duckduckgo_search import DDGS
+        logging.warning("Using deprecated duckduckgo_search package — run: pip install ddgs")
+    except ImportError:
+        DDGS = None
+        logging.warning("No search package installed — run: pip install ddgs")
 
 load_dotenv()
 
@@ -54,7 +58,7 @@ if not PROXY_SECRET:
     except Exception:
         pass
 
-_AUTH_EXEMPT_PATHS = {"/health", "/docs", "/openapi.json", "/api/proxy-token"}
+_AUTH_EXEMPT_PATHS = {"/health", "/docs", "/openapi.json", "/api/proxy-token", "/api/validate-key", "/api/upload"}
 
 class ProxyAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -339,7 +343,12 @@ RULES:
 
 
 # ─── Knowledge Distiller ───────────────────────────────────────────────────────
-async def distill_knowledge(api_key: str, model: str, query: str, raw_results: str) -> str:
+async def distill_knowledge(api_key: str, query: str, raw_results: str) -> str:
+    """
+    Distills raw search results into clean intelligence.
+    Tries a pool of fast free models with automatic fallback.
+    Returns raw_results on total failure so knowledge is never lost.
+    """
     prompt = f"""You are the RedX Scrutiny Librarian.
 Extract ORIGINAL technical data from the search results below.
 CRITICAL RULES:
@@ -350,19 +359,36 @@ CRITICAL RULES:
 Search Query: {query}
 Raw Results: {raw_results}
 """
+    # Use fast lightweight models for distillation to avoid wasting rate limits
+    distill_models = [
+        "meta-llama/llama-3.2-3b-instruct:free",
+        "nvidia/nemotron-nano-9b-v2:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    ]
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "X-Title": "RedX Librarian"}
-    body = {"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1}
-    try:
-        ssl_ctx = get_ssl_context()
-        connector_args = {"ssl": ssl_ctx} if ssl_ctx else {}
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(**connector_args)) as sess:
-            async with sess.post(f"{OPENROUTER}/chat/completions", json=body, headers=headers, timeout=30) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        logger.error(f"Distillation failed: {e}")
-    return raw_results[:2000]
+    for model in distill_models:
+        body = {"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1, "max_tokens": 2048}
+        try:
+            ssl_ctx = get_ssl_context()
+            connector_args = {"ssl": ssl_ctx} if ssl_ctx else {}
+            async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(**connector_args)) as sess:
+                async with sess.post(f"{OPENROUTER}/chat/completions", json=body, headers=headers, timeout=30) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        result = data["choices"][0]["message"]["content"].strip()
+                        if result and result != "NO_VERIFIED_DATA" and len(result) >= 20:
+                            logger.info(f"[Brain] Distillation succeeded via {model}")
+                            return result
+                        return ""  # Junk result
+                    elif resp.status == 429:
+                        logger.warning(f"[Brain] Distillation model {model} rate-limited, trying fallback")
+                        continue  # Try next model
+        except Exception as e:
+            logger.warning(f"[Brain] Distillation via {model} failed: {e}")
+            continue
+    # All distillation models failed — store raw results directly
+    logger.warning("[Brain] All distillation models failed, storing raw search data directly")
+    return raw_results[:3000]
 
 
 
@@ -372,12 +398,10 @@ Raw Results: {raw_results}
 
 BUILDER_AGENTS = [
     {
-        # Primary: Qwen3 Coder — best free coding model
-        # Fallbacks: GPT-OSS 20B → Llama 3.3 70B → DeepSeek V4 (huge ctx)
         "model": "qwen/qwen3-coder:free",
         "fallbacks": [
             "openai/gpt-oss-20b:free",
-            "meta-llama/llama-3.3-70b-instruct:free",
+            "baidu/cobuddy:free",
             "deepseek/deepseek-v4-flash:free",
         ],
         "role": "🔧 Lead Code Engineer",
@@ -388,8 +412,6 @@ BUILDER_AGENTS = [
         ),
     },
     {
-        # Primary: Laguna M.1 — specialized code/architecture model
-        # Fallbacks: GPT-OSS 120B → Nemotron Super (1M ctx) → Qwen3 Next
         "model": "poolside/laguna-m.1:free",
         "fallbacks": [
             "openai/gpt-oss-120b:free",
@@ -404,8 +426,6 @@ BUILDER_AGENTS = [
         ),
     },
     {
-        # Primary: GPT-OSS 120B — strong on docs and standards
-        # Fallbacks: Laguna XS.2 → Hermes 3 405B → Llama 3.3 70B
         "model": "openai/gpt-oss-120b:free",
         "fallbacks": [
             "poolside/laguna-xs.2:free",
@@ -420,8 +440,6 @@ BUILDER_AGENTS = [
         ),
     },
     {
-        # Primary: DeepSeek V4 Flash — 1M ctx, great for review
-        # Fallbacks: GLM 4.5 Air → Nemotron Nano Omni → MiniMax M2.5
         "model": "deepseek/deepseek-v4-flash:free",
         "fallbacks": [
             "z-ai/glm-4.5-air:free",
@@ -436,12 +454,10 @@ BUILDER_AGENTS = [
         ),
     },
     {
-        # Primary: Nemotron 3 Super — 1M ctx, great for system design
-        # Fallbacks: Arcee Trinity Thinking → GPT-OSS 20B → Nemotron Nano 30B
         "model": "nvidia/nemotron-3-super-120b-a12b:free",
         "fallbacks": [
             "arcee-ai/trinity-large-thinking:free",
-            "openai/gpt-oss-20b:free",
+            "nvidia/nemotron-nano-9b-v2:free",
             "nvidia/nemotron-3-nano-30b-a3b:free",
         ],
         "role": "⚙️ System Design & Integration Specialist",
@@ -452,11 +468,11 @@ BUILDER_AGENTS = [
     },
 ]
 
-BUILDER_SYNTHESIZER = "qwen/qwen3-coder:free"
+BUILDER_SYNTHESIZER = "poolside/laguna-m.1:free"
 BUILDER_SYNTHESIZER_FALLBACKS = [
     "openai/gpt-oss-120b:free",
     "deepseek/deepseek-v4-flash:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
 ]
 
 # Rate-limited status codes that warrant a retry
@@ -484,6 +500,7 @@ async def run_builder_agent(api_key: str, agent: dict, messages: list) -> dict:
 
     models_to_try = [agent["model"]] + agent.get("fallbacks", [])
 
+    last_error_msg = "Unknown error"
     for model in models_to_try:
         for attempt in range(_AGENT_MAX_RETRIES):
             try:
@@ -507,7 +524,7 @@ async def run_builder_agent(api_key: str, agent: dict, messages: list) -> dict:
                         f"{OPENROUTER}/chat/completions",
                         json=body,
                         headers=headers,
-                        timeout=aiohttp.ClientTimeout(total=120),
+                        timeout=aiohttp.ClientTimeout(total=600),
                     ) as resp:
                         if resp.status == 200:
                             data = await resp.json()
@@ -529,9 +546,11 @@ async def run_builder_agent(api_key: str, agent: dict, messages: list) -> dict:
                                 logger.warning(
                                     f"[Builder] {agent['role']} returned empty content via {model}"
                                 )
+                                last_error_msg = "Empty content returned"
                             # Fall through to retry / next model
                         elif resp.status in _RETRY_STATUSES:
                             wait = (_AGENT_RETRY_BASE ** attempt) + random.uniform(0, 1.5)
+                            last_error_msg = f"HTTP {resp.status} Rate Limit"
                             logger.warning(
                                 f"[Builder] {agent['role']} → {model} HTTP {resp.status}. "
                                 f"Retrying in {wait:.1f}s (attempt {attempt+1}/{_AGENT_MAX_RETRIES})"
@@ -540,12 +559,14 @@ async def run_builder_agent(api_key: str, agent: dict, messages: list) -> dict:
                             continue  # retry same model
                         else:
                             err = await resp.text()
+                            last_error_msg = f"HTTP {resp.status}: {err[:150]}"
                             logger.warning(
                                 f"[Builder] {agent['role']} → {model} HTTP {resp.status}: {err[:200]}"
                             )
                             break  # non-retryable error — skip to next fallback model
 
             except asyncio.TimeoutError:
+                last_error_msg = "TimeoutError"
                 logger.warning(
                     f"[Builder] {agent['role']} → {model} timed out (attempt {attempt+1})"
                 )
@@ -555,6 +576,7 @@ async def run_builder_agent(api_key: str, agent: dict, messages: list) -> dict:
                 break  # try next fallback model
 
             except Exception as exc:
+                last_error_msg = f"Exception: {exc}"
                 logger.error(f"[Builder] {agent['role']} → {model} exception: {exc}")
                 break  # try next fallback model
 
@@ -564,12 +586,12 @@ async def run_builder_agent(api_key: str, agent: dict, messages: list) -> dict:
         logger.info(f"[Builder] {agent['role']} switching fallback from {model}...")
 
     # All models and retries exhausted
-    logger.error(f"[Builder] {agent['role']} FAILED on all models: {models_to_try}")
+    logger.error(f"[Builder] {agent['role']} FAILED on all models: {models_to_try}. Last error: {last_error_msg}")
     return {
         "role": agent["role"],
         "model": "none",
         "content": None,   # None = clear failure signal for the stream
-        "error": f"All models unavailable: {', '.join(models_to_try)}",
+        "error": f"Failed (Last err: {last_error_msg})",
     }
 
 
@@ -662,7 +684,7 @@ Rules:
         "stream": True,
         "temperature": 0.2,
         "frequency_penalty": 0.1,
-        "max_tokens": 8192,
+        "max_tokens": 16384,
     }
 
     synth_models = [BUILDER_SYNTHESIZER] + BUILDER_SYNTHESIZER_FALLBACKS
@@ -678,7 +700,7 @@ Rules:
                     f"{OPENROUTER}/chat/completions",
                     json=synth_body,
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=180),
+                    timeout=aiohttp.ClientTimeout(total=600),
                 ) as resp:
                     if resp.status == 200:
                         yield ("data: " + json.dumps({"status": ""}) + "\n\n").encode()  # clear status bar
@@ -703,6 +725,8 @@ Rules:
 # ─── Web Search Engine (DDG → HTML Scrape fallback) ───────────────────────────
 async def web_search(query: str, max_results: int = 5) -> str:
     """Resilient web search: tries DDG API first, then raw HTML scrape."""
+    logger.info(f"[Search] Starting search for: {query[:80]}")
+
     # Attempt 1: DuckDuckGo search API
     if DDGS:
         try:
@@ -715,8 +739,12 @@ async def web_search(query: str, max_results: int = 5) -> str:
                 )
                 logger.info(f"[Search] DDG API returned {len(results)} results")
                 return text[:4000]
+            else:
+                logger.warning("[Search] DDG API returned 0 results — falling through to HTML scrape")
         except Exception as e:
             logger.warning(f"[Search] DDG API failed: {e}")
+    else:
+        logger.warning("[Search] DDGS not available, skipping to HTML scrape")
 
     # Attempt 2: Raw HTML scrape of DuckDuckGo
     try:
@@ -741,6 +769,10 @@ async def web_search(query: str, max_results: int = 5) -> str:
                         text = " ".join(snippets)
                         logger.info(f"[Search] HTML scrape returned {len(snippets)} snippets")
                         return text[:4000]
+                    else:
+                        logger.warning(f"[Search] HTML scrape got 200 but no .result__snippet elements")
+                else:
+                    logger.warning(f"[Search] HTML scrape returned HTTP {resp.status}")
     except Exception as e:
         logger.warning(f"[Search] HTML scrape failed: {e}")
 
@@ -822,21 +854,35 @@ async def proxy(request: Request, endpoint: str):
                         yield f"data: {json.dumps({'status': f'📡 Accessing Original Source: {target_url[:40]}...'})}\n\n".encode()
                         try:
                             search_results = await fetch_url_content(target_url)
+                            logger.info(f"[Search] URL fetch returned {len(search_results)} chars")
                         except Exception as e:
                             logger.error(f"URL access failed: {e}")
                     else:
                         yield f"data: {json.dumps({'status': f'🔍 Searching 2026 data for: {user_input[:50]}...'})}\n\n".encode()
                         try:
                             search_results = await web_search(f"2026 update: {user_input}")
+                            logger.info(f"[Search] web_search returned {len(search_results)} chars")
                         except Exception as e:
                             logger.error(f"Search failed: {e}")
+
+                    logger.info(f"[Pipeline] search_results length: {len(search_results)}, user_input: {user_input[:60]}")
 
                     # 3. Knowledge Distillation & Ingestion
                     if search_results:
                         yield f"data: {json.dumps({'status': '📥 Ingesting new knowledge...'})}\n\n".encode()
                         try:
-                            summary = await distill_knowledge(api_key, model_name, user_input, search_results)
-                            engine.add_knowledge(summary, {"query": user_input})
+                            summary = await distill_knowledge(api_key, user_input, search_results)
+                            if summary and len(summary.strip()) > 20:
+                                stored = await asyncio.to_thread(engine.add_knowledge, summary, {"query": user_input})
+                                if stored:
+                                    logger.info(f"[Brain] ✅ Knowledge ingested for query: {user_input[:60]}")
+                                    yield f"data: {json.dumps({'status': '🧠 Knowledge saved to Secondary Brain!'})}\n\n".encode()
+                                else:
+                                    logger.info(f"[Brain] ℹ️ Knowledge already exists (deduplication skipped).")
+                            else:
+                                # Last resort: store raw search results directly
+                                await asyncio.to_thread(engine.add_knowledge, search_results[:3000], {"query": user_input, "type": "raw"})
+                                logger.warning(f"[Brain] ⚠️ Stored raw search results as fallback")
                         except Exception as e:
                             logger.error(f"Knowledge ingestion failed: {e}")
 
@@ -1042,9 +1088,9 @@ async def validate_key(request: Request):
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
-        # Minimal request to validate the key
+        # Minimal request to validate the key — using confirmed stable free-tier model
         test_body = {
-            "model": "openai/gpt-oss-20b:free",
+            "model": "meta-llama/llama-3.3-70b-instruct:free",
             "messages": [{"role": "user", "content": "test"}],
             "max_tokens": 1,
         }
@@ -1059,6 +1105,9 @@ async def validate_key(request: Request):
             ) as resp:
                 if resp.status == 200:
                     return {"valid": True, "message": "API key is valid ✅"}
+                elif resp.status == 429:
+                    # 429 = rate limited, but the key itself IS valid
+                    return {"valid": True, "message": "API key is valid ✅ (models busy, but key works)"}
                 elif resp.status == 401:
                     return {"valid": False, "error": "Invalid API key"}
                 elif resp.status == 402:

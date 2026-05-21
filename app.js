@@ -682,7 +682,13 @@ async function sendMessage_fromHistory(c) {
                contBtn.onclick = () => {
                    contBtn.remove();
                    el.messageInput.value = 'Please continue from exactly where you left off.';
-                   sendMessage();
+                   const originalModel = state.model;
+                   if (state.model === '__multi_agent_builder__') {
+                       state.model = 'qwen/qwen-2.5-coder-32b-instruct:free'; // Force standard coder model for continuation
+                   }
+                   sendMessage().finally(() => {
+                       state.model = originalModel;
+                   });
                };
                bodyEl.appendChild(contBtn);
             }

@@ -1,4 +1,4 @@
-duckduckgo-search
+ddgs
 fastapi
 uvicorn
 python-dotenv
