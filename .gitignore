@@ -1,16 +1,95 @@
-# Python
+# ── Python ────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
-# RedX local data (private)
-.redx_knowledge/
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Environment & Secrets (NEVER PUSH) ───────────────────────────
+.env
+.env.*
+*.env
+*_key.txt
+*_secret.txt
+api_keys.json
+secrets.json
+
+# ── RedX Session Data (private conversations) ─────────────────────
+.redx/
+redx_cli/.redx/
+redx_chatbot/.redx/
+redx_pentester/.redx/
+.redx_history.json
+sessions/
+*.session.json
+
+# ── RedX Debug & Payload Dumps ────────────────────────────────────
+debug_payload.json
+last_payload.json
+patched_payload.json
+debug_prompt.log
 last_context.log
 proxy.log
 server.log
-# Test scripts
-test_*.py
-# OS files
+*.log
+
+# ── RedX Patch/Fix Scripts (dev scratch files) ────────────────────
+patch.py
+patch2.py
+patch3.py
+patch_*.py
+fix_*.py
+smart_patcher.py
+redx_patcher.py
+mcp_patcher.py
+set_model.py
+test_enter.py
+test_force_model.py
+test_keys.py
+test_live.py
+test_mouse.py
+test_nv_models.py
+test_nv_status.py
+test_redx_payload.py
+test_stream.py
+
+# ── Local Knowledge & Vector Stores ───────────────────────────────
+.redx_knowledge/
+chroma_db/
+*.chroma/
+vector_store/
+embeddings/
+*.faiss
+*.pkl
+
+# ── Node / Frontend ───────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.npm/
+dist/
+.next/
+
+# ── OS Files ──────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-# Env
-.env
+Desktop.ini
+*~
+
+# ── IDE & Editor ──────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.project
+.settings/
+
+# ── Temporary & Backup Files ──────────────────────────────────────
+*.bak
+*.tmp
+*.orig
+/tmp/
+redx_backups/
