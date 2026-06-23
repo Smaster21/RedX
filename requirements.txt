@@ -1,0 +1,11 @@
+ddgs
+fastapi
+uvicorn
+python-dotenv
+aiohttp
+httpx
+pydantic
+chromadb
+networkx
+beautifulsoup4
+sentence-transformers

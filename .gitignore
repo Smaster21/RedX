@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.env
+.env.*
+.redx_knowledge/
+*.log
+.DS_Store
+node_modules/
+*.swp
